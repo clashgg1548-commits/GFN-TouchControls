@@ -206,14 +206,14 @@ class GameOverlayView(
         badgePaint.color = if (isPressed) Color.BLACK else Color.WHITE
         badgePaint.alpha = (a255 * 0.85f).toInt()
         badgePaint.textSize = (r * 0.28f).coerceAtLeast(dp(8.5f))
-        if (st.icon != IconStyle.SLOT) {
+        if (st.id.icon != IconStyle.SLOT) {
             canvas.drawText(st.id.badge, cx, cy + r * 0.72f, badgePaint)
         }
     }
 
     private fun drawVectorIcon(canvas: Canvas, st: ControlItemState, cx: Float, cy: Float, s: Float) {
         val oy = cy - s * 0.14f
-        when (st.icon) {
+        when (st.id.icon) {
             IconStyle.FIRE -> {
                 // Bala estilizada
                 tempPath.reset()
@@ -449,8 +449,7 @@ class GameOverlayView(
             null -> Unit
         }
     }
-
-    private fun updateJoystick(rawDx: Float, rawDy: Float, radius: Float) {
+private fun updateJoystick(rawDx: Float, rawDy: Float, radius: Float) {
         val maxDist = (radius * 0.62f).coerceAtLeast(10f)
         val dist = hypot(rawDx, rawDy)
         val clamped = min(dist, maxDist)
@@ -467,7 +466,7 @@ class GameOverlayView(
 
         val sprint = config.autoSprint && joyDy < -0.78f && (dist / maxDist) > 0.85f
         joySprinting = sprint
-        val mods = if (sprint) 0x02 else 0 // Left Shift bit
+        val mods = if (sprint) 0x02 else 0
 
         VirtualHidController.setKeys("joystick", mods, keys)
     }
@@ -492,4 +491,26 @@ class GameOverlayView(
             ControlType.KEY_TAP -> VirtualHidController.tapKey(id.code)
             ControlType.JOYSTICK_WASD -> Unit
         }
-        updateAdsFla
+        updateAdsFlag()
+    }
+    private fun onButtonUp(id: ControlId) {
+        pressedButtons.remove(id)
+        if (id == ControlId.AIM && config.aimToggleMode) {
+            updateAdsFlag()
+            return
+        }
+        when (id.type) {
+            ControlType.MOUSE_BUTTON -> VirtualHidController.setMouseButton(id.name, id.code, false)
+            ControlType.KEY_HOLD -> VirtualHidController.setKeys(id.name, 0, emptySet())
+            ControlType.KEY_TAP, ControlType.JOYSTICK_WASD -> Unit
+        }
+        updateAdsFlag()
+    }
+
+    private fun updateAdsFlag() {
+        isAdsOrFiringActive = aimToggled ||
+            pressedButtons.contains(ControlId.FIRE) ||
+            pressedButtons.contains(ControlId.FIRE_LEFT) ||
+            pressedButtons.contains(ControlId.AIM)
+    }
+}
