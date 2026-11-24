@@ -562,4 +562,58 @@ class OverlayService : Service(), SensorEventListener {
         if (dt <= 0f || dt > 0.1f) return
 
         val gx = event.values[0]
-        val gy = eve
+        val gy = event.values[1]
+
+        val rot = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            display?.rotation ?: Surface.ROTATION_90
+        } else {
+            @Suppress("DEPRECATION")
+            wm.defaultDisplay.rotation
+        }
+
+        val yawRate: Float
+        val pitchRate: Float
+        when (rot) {
+            Surface.ROTATION_90 -> {
+                yawRate = gx
+                pitchRate = -gy
+            }
+            Surface.ROTATION_270 -> {
+                yawRate = -gx
+                pitchRate = gy
+            }
+            Surface.ROTATION_180 -> {
+                yawRate = gy
+                pitchRate = gx
+            }
+            else -> {
+                yawRate = -gy
+                pitchRate = -gx
+            }
+        }
+
+        val dz = config.gyroDeadzone
+        val cleanYaw = if (abs(yawRate) < dz) 0f else yawRate
+        val cleanPitch = if (abs(pitchRate) < dz) 0f else pitchRate
+        if (cleanYaw == 0f && cleanPitch == 0f) return
+
+        val ySign = if (config.gyroInvertY) -1f else 1f
+        val scale = 28f
+        val dx = cleanYaw * dt * config.gyroSensX * scale
+        val dy = cleanPitch * dt * config.gyroSensY * scale * ySign
+
+        VirtualHidController.addMouseDelta(dx, dy)
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+
+    override fun onDestroy() {
+        isRunning = false
+        sensorManager.unregisterListener(this)
+        closeControlCenter()
+        hudView?.let { try { wm.removeView(it) } catch (_: Throwable) {} }
+        tabView?.let { try { wm.removeView(it) } catch (_: Throwable) {} }
+        VirtualHidController.unbind(this)
+        super.onDestroy()
+    }
+}
