@@ -565,7 +565,7 @@ class OverlayService : Service(), SensorEventListener {
         val gy = event.values[1]
 
         val rot = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            display?.rotation ?: Surface.ROTATION_90
+            hv.display?.rotation ?: Surface.ROTATION_90
         } else {
             @Suppress("DEPRECATION")
             wm.defaultDisplay.rotation
