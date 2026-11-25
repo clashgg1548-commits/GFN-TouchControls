@@ -553,6 +553,145 @@ class OverlayService : Service(), SensorEventListener {
     private fun addSwitch(
         parent: LinearLayout,
         label: String,
+val cb = CheckBox(this).apply {
+                text = "${id.title} (${id.badge})"
+                setTextColor(Color.LTGRAY)
+                textSize = 12f
+                isChecked = config.items[id]?.visible == true
+                setOnCheckedChangeListener { _, isChecked ->
+                    config.items[id]?.visible = isChecked
+                    if (hudView?.selectedEditId == id) editVisibleCheck?.isChecked = isChecked
+                    hudView?.invalidate()
+                    config.save()
+                }
+            }
+            body.addView(cb)
+        }
+
+        addSectionTitle(body, "Giroscopio RAW (cero suavizado / cero delay)")
+        addSwitch(body, "Activar Giroscopio", config.gyroEnabled) {
+            config.gyroEnabled = it
+            config.save()
+        }
+        addSwitch(body, "Solo al Apuntar o Disparar", config.gyroOnlyAdsOrFire) {
+            config.gyroOnlyAdsOrFire = it
+            config.save()
+        }
+        addSwitch(body, "Invertir eje horizontal (X)", config.gyroInvertX) {
+            config.gyroInvertX = it
+            config.save()
+        }
+        addSwitch(body, "Invertir eje vertical (Y)", config.gyroInvertY) {
+            config.gyroInvertY = it
+            config.save()
+        }
+        addSlider(body, "Sensibilidad Giro X", 2, 80, config.gyroSensX.toInt()) {
+            config.gyroSensX = it.toFloat()
+            config.save()
+        }
+        addSlider(body, "Sensibilidad Giro Y", 2, 80, config.gyroSensY.toInt()) {
+            config.gyroSensY = it.toFloat()
+            config.save()
+        }
+        addSlider(body, "Anti-temblor mínimo (Deadzone)", 0, 15, (config.gyroDeadzone * 100f).toInt()) {
+            config.gyroDeadzone = it / 100f
+            config.save()
+        }
+
+        addSectionTitle(body, "Mira Táctil & Trackpad")
+        addSlider(body, "Sensibilidad Trackpad X", 20, 400, (config.touchSensX * 100f).toInt()) {
+            config.touchSensX = it / 100f
+config.save()
+        }
+        addSlider(body, "Sensibilidad Trackpad Y", 20, 400, (config.touchSensY * 100f).toInt()) {
+            config.touchSensY = it / 100f
+            config.save()
+        }
+        addSwitch(body, "Auto-Sprint al empujar Joystick al borde", config.autoSprint) {
+            config.autoSprint = it
+            config.save()
+        }
+        addSwitch(body, "Apuntar (ADS) por toque (Toggle)", config.aimToggleMode) {
+            config.aimToggleMode = it
+            config.save()
+        }
+
+        addSectionTitle(body, "Vista y Opacidad")
+        addSlider(body, "Opacidad de botones (%)", 15, 95, (config.hudAlpha * 100f).toInt()) {
+            config.hudAlpha = it / 100f
+            hudView?.invalidate()
+            config.save()
+        }
+        addSlider(body, "Opacidad de pestaña lateral (%)", 15, 85, (config.tabAlpha * 100f).toInt()) {
+            config.tabAlpha = it / 100f
+            tabView?.alpha = config.tabAlpha
+            config.save()
+        }
+
+        val btnReset = Button(this).apply {
+            text = "Restablecer posiciones por defecto"
+            textSize = 12f
+            setTextColor(Color.WHITE)
+            background = GradientDrawable().apply {
+                setColor(Color.argb(80, 255, 255, 255))
+                cornerRadius = 14 * d
+            }
+            setOnClickListener {
+                config.resetDefaults()
+                hudView?.invalidate()
+                tabView?.alpha = config.tabAlpha
+                closeControlCenter()
+            }
+        }
+        body.addView(btnReset)
+
+        val btnStop = Button(this).apply {
+            text = "Cerrar Overlay completamente"
+            setTextColor(Color.parseColor("#FF8A80"))
+            textSize = 12f
+            background = GradientDrawable().apply {
+                setColor(Color.argb(90, 180, 30, 30))
+                cornerRadius = 14 * d
+            }
+            setOnClickListener { stopSelf() }
+        }
+        body.addView(btnStop)
+
+        scroll.addView(body)
+        root.addView(scroll)
+
+        val panelW = (resources.displayMetrics.widthPixels * 0.46f).toInt()
+            .coerceIn((280 * d).toInt(), (400 * d).toInt())
+        val params = baseLayoutParams(panelW, WindowManager.LayoutParams.WRAP_CONTENT).apply {
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            x = (16 * d).toInt()
+        }
+        wm.addView(root, params)
+        panelView = root
+    }
+
+    private fun syncEditPanelSelection(id: ControlId) {
+        val st = config.items[id] ?: return
+        editTargetLabel?.text = "${id.title} (${id.badge})"
+        editSizeSeek?.progress = st.sizeDp.toInt().coerceIn(30, 240)
+        editVisibleCheck?.isChecked = st.visible
+    }
+
+    private fun addSectionTitle(parent: LinearLayout, text: String) {
+        val d = resources.displayMetrics.density
+        val tv = TextView(this).apply {
+            this.text = text
+            textSize = 13f
+            setTextColor(Color.parseColor("#B3E5FC"))
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setPadding(0, (12 * d).toInt(), 0, (4 * d).toInt())
+        }
+        parent.addView(tv)
+    }
+
+    private fun addSwitch(
+        parent: LinearLayout,
+        label: String,
         initial: Boolean,
         onChange: (Boolean) -> Unit
     ) {
@@ -566,7 +705,6 @@ class OverlayService : Service(), SensorEventListener {
         }
         parent.addView(sw)
     }
-
     private fun addSlider(
         parent: LinearLayout,
         label: String,
@@ -683,4 +821,4 @@ class OverlayService : Service(), SensorEventListener {
         VirtualHidController.unbind(this)
         super.onDestroy()
     }
-}
+        }
