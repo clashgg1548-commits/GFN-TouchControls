@@ -4,12 +4,9 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.RadialGradient
 import android.graphics.RectF
-import android.graphics.Shader
 import android.os.Build
 import android.view.MotionEvent
 import android.view.View
@@ -68,26 +65,22 @@ class GameOverlayView(
 
     private val density = resources.displayMetrics.density
 
-    private val glassFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private val glassStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
-    private val specularPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    // Pinturas tácticas estilo Battle Prime (difuminado suave / mate)
+    private val padFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val padStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    private val knobPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
     }
     private val iconFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        textAlign = Paint.Align.CENTER
-        isFakeBoldText = true
-    }
     private val badgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.CENTER
         isFakeBoldText = true
     }
 
     private val tempRect = RectF()
-    private val highlightRect = RectF()
     private val tempPath = Path()
 
     private fun dp(v: Float): Float = v * density
@@ -121,32 +114,32 @@ class GameOverlayView(
 
             val (cx, cy) = centerOf(st)
             val r = radiusOf(st)
-            val itemAlpha = if (!st.visible && editMode) 0.25f else baseAlpha
+            val itemAlpha = if (!st.visible && editMode) 0.20f else baseAlpha
 
             when (id) {
-                ControlId.JOYSTICK -> drawLiquidJoystick(canvas, cx, cy, r, itemAlpha, st)
-                ControlId.TRACKPAD -> drawLiquidTrackpad(canvas, cx, cy, r, itemAlpha, st)
-                else -> drawLiquidActionButton(canvas, cx, cy, r, itemAlpha, st)
+                ControlId.JOYSTICK -> drawPrimeJoystick(canvas, cx, cy, r, itemAlpha, st)
+                ControlId.TRACKPAD -> drawPrimeTrackpad(canvas, cx, cy, r, itemAlpha, st)
+                else -> drawPrimeActionButton(canvas, cx, cy, r, itemAlpha, st)
             }
 
             if (editMode && id == selectedEditId) {
-                glassStrokePaint.shader = null
-                glassStrokePaint.color = Color.parseColor("#E0AAFF")
-                glassStrokePaint.strokeWidth = dp(2.8f)
-                glassStrokePaint.alpha = 255
+                padStrokePaint.color = Color.parseColor("#FFD54F")
+                padStrokePaint.strokeWidth = dp(2.2f)
+                padStrokePaint.alpha = 255
                 if (id == ControlId.TRACKPAD) {
-                    val wBox = r * 1.5f
-                    val hBox = r * 1.1f
+                    val wBox = r * 1.48f
+                    val hBox = r * 1.08f
                     tempRect.set(cx - wBox, cy - hBox, cx + wBox, cy + hBox)
-                    canvas.drawRoundRect(tempRect, dp(22f), dp(22f), glassStrokePaint)
+                    canvas.drawRoundRect(tempRect, dp(18f), dp(18f), padStrokePaint)
                 } else {
-                    canvas.drawCircle(cx, cy, r + dp(5f), glassStrokePaint)
+                    canvas.drawCircle(cx, cy, r + dp(4f), padStrokePaint)
                 }
             }
         }
     }
 
-    private fun drawLiquidJoystick(
+    // --- JOYSTICK BATTLE PRIME (DISCO TRANSLÚCIDO OSCURO + PERILLA BLANCA LIMPIA) ---
+    private fun drawPrimeJoystick(
         canvas: Canvas,
         cx: Float,
         cy: Float,
@@ -154,57 +147,31 @@ class GameOverlayView(
         alpha: Float,
         st: ControlItemState
     ) {
-        val a255 = (alpha * 255).toInt().coerceIn(15, 255)
+        val a255 = (alpha * 255).toInt().coerceIn(10, 255)
 
-        val baseGradient = RadialGradient(
-            cx, cy, r,
-            intArrayOf(
-                Color.argb((a255 * 0.18f).toInt(), 180, 140, 255),
-                Color.argb((a255 * 0.42f).toInt(), 20, 16, 32),
-                Color.argb((a255 * 0.58f).toInt(), 12, 10, 20)
-            ),
-            floatArrayOf(0.0f, 0.75f, 1.0f),
-            Shader.TileMode.CLAMP
-        )
-        glassFillPaint.shader = baseGradient
-        canvas.drawCircle(cx, cy, r, glassFillPaint)
+        // 1. Disco base oscuro translúcido suave (sin bordes duros)
+        padFillPaint.color = Color.argb((a255 * 0.38f).toInt(), 12, 14, 18)
+        canvas.drawCircle(cx, cy, r, padFillPaint)
 
-        glassStrokePaint.shader = null
-        glassStrokePaint.color = if (joySprinting) Color.parseColor("#E0AAFF") else Color.WHITE
-        glassStrokePaint.alpha = if (joySprinting) 240 else (a255 * 0.65f).toInt()
-        glassStrokePaint.strokeWidth = dp(1.8f)
-        canvas.drawCircle(cx, cy, r, glassStrokePaint)
+        // Borde ultrafino y tenue
+        padStrokePaint.color = Color.WHITE
+        padStrokePaint.alpha = (a255 * 0.22f).toInt()
+        padStrokePaint.strokeWidth = dp(1f)
+        canvas.drawCircle(cx, cy, r, padStrokePaint)
 
+        // 2. Perilla central blanca minimalista (exacta a Battle Prime)
         val maxDist = r * 0.62f
         val kx = cx + joyDx * maxDist
         val ky = cy + joyDy * maxDist
-        val kr = r * 0.38f
+        val kr = r * 0.34f
 
-        val knobGradient = RadialGradient(
-            kx - kr * 0.35f, ky - kr * 0.35f, kr * 1.25f,
-            intArrayOf(
-                Color.argb((a255 * 0.95f).toInt(), 255, 255, 255),
-                Color.argb((a255 * 0.70f).toInt(), 199, 125, 255),
-                Color.argb((a255 * 0.85f).toInt(), 42, 28, 64)
-            ),
-            floatArrayOf(0.0f, 0.45f, 1.0f),
-            Shader.TileMode.CLAMP
-        )
-        glassFillPaint.shader = knobGradient
-        canvas.drawCircle(kx, ky, kr, glassFillPaint)
-
-        highlightRect.set(kx - kr * 0.65f, ky - kr * 0.75f, kx + kr * 0.65f, ky - kr * 0.1f)
-        specularPaint.color = Color.WHITE
-        specularPaint.alpha = (a255 * 0.65f).toInt()
-        canvas.drawOval(highlightRect, specularPaint)
-
-        glassStrokePaint.color = Color.WHITE
-        glassStrokePaint.alpha = (a255 * 0.90f).toInt()
-        glassStrokePaint.strokeWidth = dp(1.6f)
-        canvas.drawCircle(kx, ky, kr, glassStrokePaint)
+        knobPaint.color = if (joySprinting) Color.parseColor("#FFD54F") else Color.WHITE
+        knobPaint.alpha = (a255 * 0.78f).toInt()
+        canvas.drawCircle(kx, ky, kr, knobPaint)
     }
 
-    private fun drawLiquidTrackpad(
+    // --- TRACKPAD DE MIRA (ZONA DIFUMINADA SUAVE) ---
+    private fun drawPrimeTrackpad(
         canvas: Canvas,
         cx: Float,
         cy: Float,
@@ -212,48 +179,30 @@ class GameOverlayView(
         alpha: Float,
         st: ControlItemState
     ) {
-        val a255 = (alpha * 255).toInt().coerceIn(15, 255)
+        val a255 = (alpha * 255).toInt().coerceIn(10, 255)
         val wBox = r * 1.48f
         val hBox = r * 1.08f
         tempRect.set(cx - wBox, cy - hBox, cx + wBox, cy + hBox)
 
-        val trackGradient = LinearGradient(
-            cx, cy - hBox, cx, cy + hBox,
-            intArrayOf(
-                Color.argb((a255 * 0.45f).toInt(), 60, 45, 90),
-                Color.argb((a255 * 0.28f).toInt(), 22, 18, 36),
-                Color.argb((a255 * 0.50f).toInt(), 14, 12, 24)
-            ),
-            floatArrayOf(0.0f, 0.5f, 1.0f),
-            Shader.TileMode.CLAMP
-        )
-        glassFillPaint.shader = trackGradient
-        canvas.drawRoundRect(tempRect, dp(22f), dp(22f), glassFillPaint)
+        // Fondo difuminado oscuro sin saturar
+        padFillPaint.color = Color.argb((a255 * 0.22f).toInt(), 10, 12, 16)
+        canvas.drawRoundRect(tempRect, dp(18f), dp(18f), padFillPaint)
 
-        glassStrokePaint.shader = null
-        glassStrokePaint.color = Color.argb((a255 * 0.85f).toInt(), 255, 255, 255)
-        glassStrokePaint.strokeWidth = dp(1.6f)
-        canvas.drawRoundRect(tempRect, dp(22f), dp(22f), glassStrokePaint)
+        // Borde muy sutil
+        padStrokePaint.color = Color.WHITE
+        padStrokePaint.alpha = (a255 * 0.18f).toInt()
+        padStrokePaint.strokeWidth = dp(1f)
+        canvas.drawRoundRect(tempRect, dp(18f), dp(18f), padStrokePaint)
 
-        highlightRect.set(cx - wBox + dp(14f), cy - hBox + dp(3f), cx + wBox - dp(14f), cy - hBox + dp(16f))
-        specularPaint.color = Color.WHITE
-        specularPaint.alpha = (a255 * 0.28f).toInt()
-        canvas.drawRoundRect(highlightRect, dp(8f), dp(8f), specularPaint)
-
-        val cross = dp(16f)
-        glassStrokePaint.color = Color.WHITE
-        glassStrokePaint.alpha = (a255 * 0.35f).toInt()
-        glassStrokePaint.strokeWidth = dp(1.2f)
-        canvas.drawLine(cx - cross, cy, cx + cross, cy, glassStrokePaint)
-        canvas.drawLine(cx, cy - cross, cx, cy + cross, glassStrokePaint)
-
-        textPaint.color = Color.WHITE
-        textPaint.alpha = (a255 * 0.65f).toInt()
-        textPaint.textSize = dp(10.5f)
-        canvas.drawText("TRACKPAD MIRA", cx, cy + hBox - dp(10f), textPaint)
+        // Pequeña cruz central de referencia táctil
+        val cross = dp(12f)
+        padStrokePaint.alpha = (a255 * 0.25f).toInt()
+        canvas.drawLine(cx - cross, cy, cx + cross, cy, padStrokePaint)
+        canvas.drawLine(cx, cy - cross, cx, cy + cross, padStrokePaint)
     }
 
-    private fun drawLiquidActionButton(
+    // --- BOTONES DE ACCIÓN BATTLE PRIME (DISCOS SUAVES CON ÍCONO BLANCO) ---
+    private fun drawPrimeActionButton(
         canvas: Canvas,
         cx: Float,
         cy: Float,
@@ -262,66 +211,34 @@ class GameOverlayView(
         st: ControlItemState
     ) {
         val isPressed = pressedButtons.contains(st.id) || (st.id == ControlId.AIM && aimToggled)
-        val a255 = (alpha * 255).toInt().coerceIn(15, 255)
+        val a255 = (alpha * 255).toInt().coerceIn(10, 255)
 
-        val (topColor, midColor, botColor) = when {
-            isPressed -> Triple(
-                Color.argb(230, 224, 170, 255),
-                Color.argb(200, 157, 78, 221),
-                Color.argb(220, 90, 24, 154)
-            )
-            st.id == ControlId.FIRE || st.id == ControlId.FIRE_LEFT -> Triple(
-                Color.argb((a255 * 0.70f).toInt(), 120, 50, 80),
-                Color.argb((a255 * 0.40f).toInt(), 60, 24, 40),
-                Color.argb((a255 * 0.60f).toInt(), 35, 14, 25)
-            )
-            st.id == ControlId.AIM -> Triple(
-                Color.argb((a255 * 0.70f).toInt(), 70, 60, 130),
-                Color.argb((a255 * 0.40f).toInt(), 35, 28, 70),
-                Color.argb((a255 * 0.60f).toInt(), 20, 16, 42)
-            )
-            else -> Triple(
-                Color.argb((a255 * 0.55f).toInt(), 70, 60, 95),
-                Color.argb((a255 * 0.30f).toInt(), 30, 24, 45),
-                Color.argb((a255 * 0.50f).toInt(), 18, 14, 28)
-            )
+        // 1. Disco suave translúcido
+        padFillPaint.color = if (isPressed) {
+            Color.argb((a255 * 0.75f).toInt(), 60, 68, 85)
+        } else {
+            Color.argb((a255 * 0.38f).toInt(), 12, 14, 18)
         }
+        canvas.drawCircle(cx, cy, r, padFillPaint)
 
-        val buttonGradient = LinearGradient(
-            cx, cy - r, cx, cy + r,
-            intArrayOf(topColor, midColor, botColor),
-            floatArrayOf(0.0f, 0.55f, 1.0f),
-            Shader.TileMode.CLAMP
-        )
-        glassFillPaint.shader = buttonGradient
-        canvas.drawCircle(cx, cy, r, glassFillPaint)
+        // 2. Borde sutil
+        padStrokePaint.color = if (isPressed) Color.WHITE else Color.argb((a255 * 0.25f).toInt(), 255, 255, 255)
+        padStrokePaint.alpha = if (isPressed) 240 else (a255 * 0.25f).toInt()
+        padStrokePaint.strokeWidth = dp(1.2f)
+        canvas.drawCircle(cx, cy, r, padStrokePaint)
 
-        highlightRect.set(cx - r * 0.65f, cy - r * 0.85f, cx + r * 0.65f, cy - r * 0.15f)
-        specularPaint.color = Color.WHITE
-        specularPaint.alpha = if (isPressed) 180 else (a255 * 0.40f).toInt()
-        canvas.drawOval(highlightRect, specularPaint)
-
-        glassStrokePaint.shader = null
-        glassStrokePaint.color = when {
-            isPressed -> Color.WHITE
-            st.id == ControlId.FIRE || st.id == ControlId.FIRE_LEFT -> Color.parseColor("#FF8A80")
-            st.id == ControlId.AIM -> Color.parseColor("#B388FF")
-            else -> Color.argb((a255 * 0.85f).toInt(), 255, 255, 255)
-        }
-        glassStrokePaint.alpha = if (isPressed) 255 else (a255 * 0.80f).toInt()
-        glassStrokePaint.strokeWidth = dp(1.8f)
-        canvas.drawCircle(cx, cy, r, glassStrokePaint)
-
-        iconPaint.color = if (isPressed) Color.BLACK else Color.WHITE
-        iconPaint.alpha = if (isPressed) 240 else a255
-        iconPaint.strokeWidth = dp(2f)
+        // 3. Ícono blanco nítido
+        iconPaint.color = Color.WHITE
+        iconPaint.alpha = if (isPressed) 255 else (a255 * 0.90f).toInt()
+        iconPaint.strokeWidth = dp(1.9f)
         iconFillPaint.color = iconPaint.color
         iconFillPaint.alpha = iconPaint.alpha
 
-        drawVectorIcon(canvas, st, cx, cy, r * 0.48f)
+        drawVectorIcon(canvas, st, cx, cy, r * 0.50f)
 
-        badgePaint.color = if (isPressed) Color.BLACK else Color.WHITE
-        badgePaint.alpha = if (isPressed) 240 else (a255 * 0.85f).toInt()
+        // Etiqueta discreta de la tecla
+        badgePaint.color = Color.WHITE
+        badgePaint.alpha = if (isPressed) 230 else (a255 * 0.60f).toInt()
         badgePaint.textSize = (r * 0.28f).coerceAtLeast(dp(8.5f))
         if (st.id.icon != IconStyle.SLOT) {
             canvas.drawText(st.id.badge, cx, cy + r * 0.72f, badgePaint)
@@ -329,7 +246,7 @@ class GameOverlayView(
     }
 
     private fun drawVectorIcon(canvas: Canvas, st: ControlItemState, cx: Float, cy: Float, s: Float) {
-        val oy = cy - s * 0.14f
+        val oy = cy - s * 0.12f
         when (st.id.icon) {
             IconStyle.FIRE -> {
                 tempPath.reset()
@@ -342,9 +259,9 @@ class GameOverlayView(
                 canvas.drawLine(cx - s * 0.35f, oy + s * 0.25f, cx + s * 0.35f, oy + s * 0.25f, iconPaint)
             }
             IconStyle.AIM -> {
-                val r1 = s * 0.32f
-                val r2 = s * 0.88f
-                canvas.drawCircle(cx, oy, s * 0.62f, iconPaint)
+                val r1 = s * 0.30f
+                val r2 = s * 0.85f
+                canvas.drawCircle(cx, oy, s * 0.60f, iconPaint)
                 canvas.drawLine(cx - r2, oy, cx - r1, oy, iconPaint)
                 canvas.drawLine(cx + r1, oy, cx + r2, oy, iconPaint)
                 canvas.drawLine(cx, oy - r2, cx, oy - r1, iconPaint)
@@ -354,9 +271,9 @@ class GameOverlayView(
             IconStyle.JUMP -> {
                 tempPath.reset()
                 tempPath.moveTo(cx, oy - s * 0.65f)
-                tempPath.lineTo(cx - s * 0.55f, oy + s * 0.05f)
+                tempPath.lineTo(cx - s * 0.52f, oy + s * 0.05f)
                 tempPath.moveTo(cx, oy - s * 0.65f)
-                tempPath.lineTo(cx + s * 0.55f, oy + s * 0.05f)
+                tempPath.lineTo(cx + s * 0.52f, oy + s * 0.05f)
                 tempPath.moveTo(cx, oy - s * 0.65f)
                 tempPath.lineTo(cx, oy + s * 0.55f)
                 canvas.drawPath(tempPath, iconPaint)
