@@ -353,7 +353,7 @@ class OverlayService : Service(), SensorEventListener {
         editVisibleCheck = chkVis
         body.addView(chkVis)
 
-        val seekSize = addSlider(body, "Tamaño del botón", 30, 180, 60) { v ->
+        val seekSize = addSlider(body, "Tamaño del botón / área", 30, 240, 60) { v ->
             val id = hudView?.selectedEditId ?: return@addSlider
             config.items[id]?.sizeDp = v.toFloat()
             hudView?.invalidate()
@@ -406,12 +406,12 @@ class OverlayService : Service(), SensorEventListener {
             config.save()
         }
 
-        addSectionTitle(body, "Mira Táctil & Jugabilidad")
-        addSlider(body, "Sensibilidad Mira Táctil X", 20, 400, (config.touchSensX * 100f).toInt()) {
+        addSectionTitle(body, "Mira Táctil & Trackpad")
+        addSlider(body, "Sensibilidad Trackpad X", 20, 400, (config.touchSensX * 100f).toInt()) {
             config.touchSensX = it / 100f
             config.save()
         }
-        addSlider(body, "Sensibilidad Mira Táctil Y", 20, 400, (config.touchSensY * 100f).toInt()) {
+        addSlider(body, "Sensibilidad Trackpad Y", 20, 400, (config.touchSensY * 100f).toInt()) {
             config.touchSensY = it / 100f
             config.save()
         }
@@ -472,7 +472,7 @@ class OverlayService : Service(), SensorEventListener {
     private fun syncEditPanelSelection(id: ControlId) {
         val st = config.items[id] ?: return
         editTargetLabel?.text = "${id.title} (${id.badge})"
-        editSizeSeek?.progress = st.sizeDp.toInt().coerceIn(30, 180)
+        editSizeSeek?.progress = st.sizeDp.toInt().coerceIn(30, 240)
         editVisibleCheck?.isChecked = st.visible
     }
 
@@ -563,7 +563,7 @@ class OverlayService : Service(), SensorEventListener {
             return
         }
         val dt = (event.timestamp - lastGyroTs) * 1e-9f
-  lastGyroTs = event.timestamp
+    lastGyroTs = event.timestamp
         if (dt <= 0f || dt > 0.1f) return
 
         val gx = event.values[0]
