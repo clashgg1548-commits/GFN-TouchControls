@@ -49,9 +49,7 @@ class OverlayService : Service(), SensorEventListener {
 
     private var hudView: GameOverlayView? = null
     private var tabView: TextView? = null
-    private var tabParams: WindowManager.LayoutParams? = null
     private var panelView: LinearLayout? = null
-
     private var hudPaused = false
     private var lastGyroTs = 0L
 
@@ -104,7 +102,7 @@ class OverlayService : Service(), SensorEventListener {
         )
         val notif: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("GFN Touch Controls activo")
-            .setContentText("Tocá la pestaña de cristal para configurar")
+            .setContentText("Tocá la pestaña discreta en pantalla para configurar")
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setContentIntent(pi)
             .setOngoing(true)
@@ -159,7 +157,6 @@ class OverlayService : Service(), SensorEventListener {
         hudView = view
     }
 
-    // --- PESTAÑA FLOTANTE ESTILO PÍLDORA LIQUID GLASS ---
     @SuppressLint("ClickableViewAccessibility")
     private fun createFloatingTab() {
         val density = resources.displayMetrics.density
@@ -169,21 +166,16 @@ class OverlayService : Service(), SensorEventListener {
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
             setPadding(
-                (14 * density).toInt(),
-                (8 * density).toInt(),
-                (14 * density).toInt(),
-                (8 * density).toInt()
+                (12 * density).toInt(),
+                (7 * density).toInt(),
+                (12 * density).toInt(),
+                (7 * density).toInt()
             )
+            // Liquid Glass tab
             background = GradientDrawable().apply {
-                // Fondo translúcido con brillo de cristal
-                colors = intArrayOf(
-                    Color.argb(160, 45, 55, 80),
-                    Color.argb(210, 16, 20, 32)
-                )
-                gradientType = GradientDrawable.LINEAR_GRADIENT
-                orientation = GradientDrawable.Orientation.TOP_BOTTOM
-                cornerRadius = 24 * density
-                setStroke((1.4f * density).toInt(), Color.argb(200, 200, 235, 255))
+                setColor(Color.argb(140, 24, 20, 38))
+                cornerRadius = 16 * density
+                setStroke((1.2f * density).toInt(), Color.argb(160, 255, 255, 255))
             }
             alpha = config.tabAlpha
         }
@@ -236,24 +228,14 @@ class OverlayService : Service(), SensorEventListener {
 
         wm.addView(tab, params)
         tabView = tab
-        tabParams = params
     }
 
     private fun toggleControlCenter() {
-        if (panelView != null) {
-            closeControlCenter()
-        } else {
-            openControlCenter()
-        }
+        if (panelView != null) closeControlCenter() else openControlCenter()
     }
 
     private fun closeControlCenter() {
-        panelView?.let {
-            try {
-                wm.removeView(it)
-            } catch (_: Throwable) {
-            }
-        }
+        panelView?.let { try { wm.removeView(it) } catch (_: Throwable) {} }
         panelView = null
         editTargetLabel = null
         editSizeSeek = null
@@ -261,7 +243,6 @@ class OverlayService : Service(), SensorEventListener {
         config.save()
     }
 
-    // --- PANEL CENTRO DE CONTROL ESTILO CRISTAL ESMERILADO ---
     private fun openControlCenter() {
         val d = resources.displayMetrics.density
         val pad = (14 * d).toInt()
@@ -269,15 +250,11 @@ class OverlayService : Service(), SensorEventListener {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(pad, pad, pad, pad)
+            // Fondo Liquid Glass estilo BitChord
             background = GradientDrawable().apply {
-                colors = intArrayOf(
-                    Color.argb(235, 26, 32, 48),
-                    Color.argb(248, 12, 14, 22)
-                )
-                gradientType = GradientDrawable.LINEAR_GRADIENT
-                orientation = GradientDrawable.Orientation.TOP_BOTTOM
-                cornerRadius = 24 * d
-                setStroke((1.5f * d).toInt(), Color.argb(160, 200, 230, 255))
+                setColor(Color.argb(230, 20, 16, 32))
+                cornerRadius = 20 * d
+                setStroke((1.5f * d).toInt(), Color.argb(120, 255, 255, 255))
             }
         }
 
@@ -287,7 +264,7 @@ class OverlayService : Service(), SensorEventListener {
         }
         val title = TextView(this).apply {
             text = "Centro de Control"
-            textSize = 16.5f
+            textSize = 16f
             setTextColor(Color.WHITE)
             setTypeface(null, android.graphics.Typeface.BOLD)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
@@ -295,11 +272,6 @@ class OverlayService : Service(), SensorEventListener {
         val btnClose = Button(this).apply {
             text = "Cerrar"
             textSize = 12f
-            setTextColor(Color.WHITE)
-            background = GradientDrawable().apply {
-                setColor(Color.argb(120, 255, 255, 255))
-                cornerRadius = 14 * d
-            }
             setOnClickListener { closeControlCenter() }
         }
         header.addView(title)
@@ -314,21 +286,14 @@ class OverlayService : Service(), SensorEventListener {
         }
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, (8 * d).toInt(), 0, (10 * d).toInt())
+            setPadding(0, (6 * d).toInt(), 0, (10 * d).toInt())
         }
 
         val quickRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val btnPause = Button(this).apply {
             text = if (hudPaused) "Mostrar HUD" else "Modo Cursor"
-            textSize = 11.5f
-            setTextColor(Color.WHITE)
-            background = GradientDrawable().apply {
-                setColor(Color.argb(90, 255, 255, 255))
-                cornerRadius = 14 * d
-            }
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                setMargins(0, 0, (6 * d).toInt(), 0)
-            }
+            textSize = 11f
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             setOnClickListener {
                 hudPaused = !hudPaused
                 hudView?.visibility = if (hudPaused) View.GONE else View.VISIBLE
@@ -339,15 +304,8 @@ class OverlayService : Service(), SensorEventListener {
         val btnEdit = Button(this).apply {
             val ed = hudView?.editMode == true
             text = if (ed) "Listo (Guardar)" else "Mover Botones"
-            textSize = 11.5f
-            setTextColor(Color.WHITE)
-            background = GradientDrawable().apply {
-                setColor(Color.argb(120, 0, 229, 255))
-                cornerRadius = 14 * d
-            }
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                setMargins((6 * d).toInt(), 0, 0, 0)
-            }
+            textSize = 11f
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             setOnClickListener {
                 val hv = hudView ?: return@setOnClickListener
                 hv.editMode = !hv.editMode
@@ -366,8 +324,8 @@ class OverlayService : Service(), SensorEventListener {
 
         addSectionTitle(body, "Botón seleccionado (tocá uno en Modo Mover)")
         val lblTarget = TextView(this).apply {
-            setTextColor(Color.parseColor("#80D8FF"))
-            textSize = 13.5f
+            setTextColor(Color.parseColor("#E0AAFF"))
+            textSize = 13f
         }
         editTargetLabel = lblTarget
         body.addView(lblTarget)
@@ -475,11 +433,6 @@ class OverlayService : Service(), SensorEventListener {
         val btnReset = Button(this).apply {
             text = "Restablecer posiciones por defecto"
             textSize = 12f
-            setTextColor(Color.WHITE)
-            background = GradientDrawable().apply {
-                setColor(Color.argb(80, 255, 255, 255))
-                cornerRadius = 14 * d
-            }
             setOnClickListener {
                 config.resetDefaults()
                 hudView?.invalidate()
@@ -491,12 +444,8 @@ class OverlayService : Service(), SensorEventListener {
 
         val btnStop = Button(this).apply {
             text = "Cerrar Overlay completamente"
-            setTextColor(Color.parseColor("#FF8A80"))
+            setTextColor(Color.parseColor("#FF6E40"))
             textSize = 12f
-            background = GradientDrawable().apply {
-                setColor(Color.argb(90, 180, 30, 30))
-                cornerRadius = 14 * d
-            }
             setOnClickListener { stopSelf() }
         }
         body.addView(btnStop)
@@ -526,163 +475,7 @@ class OverlayService : Service(), SensorEventListener {
         val tv = TextView(this).apply {
             this.text = text
             textSize = 13f
-            setTextColor(Color.parseColor("#B3E5FC"))
-            setTypeface(null, android.graphics.Typeface.BOLD)
-            setPadding(0, (12 * d).toInt(), 0, (4 * d).toInt())
-        }
-        parent.addView(tv)
-    }
-
-    private fun addSwitch(
-        parent: LinearLayout,
-        label: String,
-        initial: Boolean,
-        onChange: (Boolean) -> Unit
-    ) {
-        @SuppressLint("UseSwitchCompatOrMaterialCode")
-        val sw = Switch(this).apply {
-            text = label
-            setTextColor(Color.WHITE)
-            textSize = 12.5f
-            isChecked = initial
-            setOnCheckedChangeListener { _, checked -> onChange(checked) }
-        }
-        parent.addView(tv)
-    }
-
-    private fun addSwitch(
-        parent: LinearLayout,
-        label: String,
-val cb = CheckBox(this).apply {
-                text = "${id.title} (${id.badge})"
-                setTextColor(Color.LTGRAY)
-                textSize = 12f
-                isChecked = config.items[id]?.visible == true
-                setOnCheckedChangeListener { _, isChecked ->
-                    config.items[id]?.visible = isChecked
-                    if (hudView?.selectedEditId == id) editVisibleCheck?.isChecked = isChecked
-                    hudView?.invalidate()
-                    config.save()
-                }
-            }
-            body.addView(cb)
-        }
-
-        addSectionTitle(body, "Giroscopio RAW (cero suavizado / cero delay)")
-        addSwitch(body, "Activar Giroscopio", config.gyroEnabled) {
-            config.gyroEnabled = it
-            config.save()
-        }
-        addSwitch(body, "Solo al Apuntar o Disparar", config.gyroOnlyAdsOrFire) {
-            config.gyroOnlyAdsOrFire = it
-            config.save()
-        }
-        addSwitch(body, "Invertir eje horizontal (X)", config.gyroInvertX) {
-            config.gyroInvertX = it
-            config.save()
-        }
-        addSwitch(body, "Invertir eje vertical (Y)", config.gyroInvertY) {
-            config.gyroInvertY = it
-            config.save()
-        }
-        addSlider(body, "Sensibilidad Giro X", 2, 80, config.gyroSensX.toInt()) {
-            config.gyroSensX = it.toFloat()
-            config.save()
-        }
-        addSlider(body, "Sensibilidad Giro Y", 2, 80, config.gyroSensY.toInt()) {
-            config.gyroSensY = it.toFloat()
-            config.save()
-        }
-        addSlider(body, "Anti-temblor mínimo (Deadzone)", 0, 15, (config.gyroDeadzone * 100f).toInt()) {
-            config.gyroDeadzone = it / 100f
-            config.save()
-        }
-
-        addSectionTitle(body, "Mira Táctil & Trackpad")
-        addSlider(body, "Sensibilidad Trackpad X", 20, 400, (config.touchSensX * 100f).toInt()) {
-            config.touchSensX = it / 100f
-config.save()
-        }
-        addSlider(body, "Sensibilidad Trackpad Y", 20, 400, (config.touchSensY * 100f).toInt()) {
-            config.touchSensY = it / 100f
-            config.save()
-        }
-        addSwitch(body, "Auto-Sprint al empujar Joystick al borde", config.autoSprint) {
-            config.autoSprint = it
-            config.save()
-        }
-        addSwitch(body, "Apuntar (ADS) por toque (Toggle)", config.aimToggleMode) {
-            config.aimToggleMode = it
-            config.save()
-        }
-
-        addSectionTitle(body, "Vista y Opacidad")
-        addSlider(body, "Opacidad de botones (%)", 15, 95, (config.hudAlpha * 100f).toInt()) {
-            config.hudAlpha = it / 100f
-            hudView?.invalidate()
-            config.save()
-        }
-        addSlider(body, "Opacidad de pestaña lateral (%)", 15, 85, (config.tabAlpha * 100f).toInt()) {
-            config.tabAlpha = it / 100f
-            tabView?.alpha = config.tabAlpha
-            config.save()
-        }
-
-        val btnReset = Button(this).apply {
-            text = "Restablecer posiciones por defecto"
-            textSize = 12f
-            setTextColor(Color.WHITE)
-            background = GradientDrawable().apply {
-                setColor(Color.argb(80, 255, 255, 255))
-                cornerRadius = 14 * d
-            }
-            setOnClickListener {
-                config.resetDefaults()
-                hudView?.invalidate()
-                tabView?.alpha = config.tabAlpha
-                closeControlCenter()
-            }
-        }
-        body.addView(btnReset)
-
-        val btnStop = Button(this).apply {
-            text = "Cerrar Overlay completamente"
-            setTextColor(Color.parseColor("#FF8A80"))
-            textSize = 12f
-            background = GradientDrawable().apply {
-                setColor(Color.argb(90, 180, 30, 30))
-                cornerRadius = 14 * d
-            }
-            setOnClickListener { stopSelf() }
-        }
-        body.addView(btnStop)
-
-        scroll.addView(body)
-        root.addView(scroll)
-
-        val panelW = (resources.displayMetrics.widthPixels * 0.46f).toInt()
-            .coerceIn((280 * d).toInt(), (400 * d).toInt())
-        val params = baseLayoutParams(panelW, WindowManager.LayoutParams.WRAP_CONTENT).apply {
-            gravity = Gravity.CENTER_VERTICAL or Gravity.START
-            x = (16 * d).toInt()
-        }
-        wm.addView(root, params)
-        panelView = root
-    }
-
-    private fun syncEditPanelSelection(id: ControlId) {
-        val st = config.items[id] ?: return
-        editTargetLabel?.text = "${id.title} (${id.badge})"
-        editSizeSeek?.progress = st.sizeDp.toInt().coerceIn(30, 240)
-        editVisibleCheck?.isChecked = st.visible
-    }
-
-    private fun addSectionTitle(parent: LinearLayout, text: String) {
-        val d = resources.displayMetrics.density
-        val tv = TextView(this).apply {
-            this.text = text
-            textSize = 13f
-            setTextColor(Color.parseColor("#B3E5FC"))
+            setTextColor(Color.parseColor("#C77DFF"))
             setTypeface(null, android.graphics.Typeface.BOLD)
             setPadding(0, (12 * d).toInt(), 0, (4 * d).toInt())
         }
@@ -705,6 +498,7 @@ config.save()
         }
         parent.addView(sw)
     }
+
     private fun addSlider(
         parent: LinearLayout,
         label: String,
@@ -810,6 +604,7 @@ config.save()
 
         VirtualHidController.addMouseDelta(dx, dy)
     }
+
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     override fun onDestroy() {
@@ -821,4 +616,4 @@ config.save()
         VirtualHidController.unbind(this)
         super.onDestroy()
     }
-        }
+}
