@@ -579,29 +579,30 @@ class OverlayService : Service(), SensorEventListener {
         val gy = event.values[1]
 
         val rot = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            hv.display?.rotation ?: Surface.ROTATION_90
+            hudView?.display?.rotation ?: tabView?.display?.rotation ?: Surface.ROTATION_90
         } else {
             @Suppress("DEPRECATION")
             wm.defaultDisplay.rotation
         }
 
+        // En modo horizontal (landscape): gy es girar izquierda/derecha (yaw) y gx es arriba/abajo (pitch)
         val yawRate: Float
         val pitchRate: Float
         when (rot) {
             Surface.ROTATION_90 -> {
-                yawRate = gx
-                pitchRate = -gy
+                yawRate = -gy
+                pitchRate = -gx
             }
             Surface.ROTATION_270 -> {
-                yawRate = -gx
-                pitchRate = gy
-            }
-            Surface.ROTATION_180 -> {
                 yawRate = gy
                 pitchRate = gx
             }
+            Surface.ROTATION_180 -> {
+                yawRate = -gx
+                pitchRate = gy
+            }
             else -> {
-                yawRate = -gy
+                yawRate = gy
                 pitchRate = -gx
             }
         }
@@ -612,9 +613,9 @@ class OverlayService : Service(), SensorEventListener {
         if (cleanYaw == 0f && cleanPitch == 0f) return
 
         val ySign = if (config.gyroInvertY) -1f else 1f
-        val scale = 28f
-        val dx = cleanYaw * dt * config.gyroSensX * scale
-        val dy = cleanPitch * dt * config.gyroSensY * scale * ySign
+        // Escala 1:1 directa sin saturar
+        val dx = cleanYaw * dt * config.gyroSensX * 12f
+        val dy = cleanPitch * dt * config.gyroSensY * 12f * ySign
 
         VirtualHidController.addMouseDelta(dx, dy)
     }
