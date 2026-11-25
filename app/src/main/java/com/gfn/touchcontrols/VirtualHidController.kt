@@ -245,28 +245,32 @@ object VirtualHidController {
         injectEvent(ke)
     }
 
+    var screenWidth = 2400f
+    var screenHeight = 1080f
+
     private fun injectMouse(buttons: Int, dx: Int, dy: Int) {
         val now = SystemClock.uptimeMillis()
+        val cx = screenWidth / 2f
+        val cy = screenHeight / 2f
 
         val props = arrayOf(MotionEvent.PointerProperties().apply {
             id = 0
             toolType = MotionEvent.TOOL_TYPE_MOUSE
         })
-        val coords = arrayOf(MotionEvent.PointerCoords().apply {
-            x = dx.toFloat()
-            y = dy.toFloat()
-            setAxisValue(MotionEvent.AXIS_X, dx.toFloat())
-            setAxisValue(MotionEvent.AXIS_Y, dy.toFloat())
-            setAxisValue(MotionEvent.AXIS_RELATIVE_X, dx.toFloat())
-            setAxisValue(MotionEvent.AXIS_RELATIVE_Y, dy.toFloat())
-        })
 
         val changed = buttons xor lastMouseButtons
         if (changed != 0) {
             val isDown = (buttons and changed) != 0
+            // El clic se hace siempre en el CENTRO de la pantalla para impactar en el juego
+            val clickCoords = arrayOf(MotionEvent.PointerCoords().apply {
+                x = cx
+                y = cy
+                setAxisValue(MotionEvent.AXIS_X, cx)
+                setAxisValue(MotionEvent.AXIS_Y, cy)
+            })
             val action = if (isDown) MotionEvent.ACTION_DOWN else MotionEvent.ACTION_UP
             val ev = MotionEvent.obtain(
-                now, now, action, 1, props, coords, 0, buttons,
+                now, now, action, 1, props, clickCoords, 0, buttons,
                 1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE, 0
             )
             injectEvent(ev)
@@ -275,15 +279,24 @@ object VirtualHidController {
         }
 
         if (dx != 0 || dy != 0) {
+            // Se envía el movimiento relativo desde el centro hacia (cx + dx, cy + dy)
+            // de modo que el cursor nunca toque los bordes de la pantalla
+            val moveCoords = arrayOf(MotionEvent.PointerCoords().apply {
+                x = cx + dx.toFloat()
+                y = cy + dy.toFloat()
+                setAxisValue(MotionEvent.AXIS_X, cx + dx.toFloat())
+                setAxisValue(MotionEvent.AXIS_Y, cy + dy.toFloat())
+                setAxisValue(MotionEvent.AXIS_RELATIVE_X, dx.toFloat())
+                setAxisValue(MotionEvent.AXIS_RELATIVE_Y, dy.toFloat())
+            })
             val ev = MotionEvent.obtain(
-                now, now, MotionEvent.ACTION_MOVE, 1, props, coords, 0, buttons,
+                now, now, MotionEvent.ACTION_MOVE, 1, props, moveCoords, 0, buttons,
                 1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE, 0
             )
             injectEvent(ev)
             ev.recycle()
         }
     }
-
     private fun hidToAndroidKeyCode(hid: Int): Int = when (hid) {
         0x04 -> KeyEvent.KEYCODE_A
         0x06 -> KeyEvent.KEYCODE_C
