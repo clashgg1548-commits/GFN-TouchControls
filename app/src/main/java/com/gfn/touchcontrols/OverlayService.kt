@@ -389,6 +389,10 @@ class OverlayService : Service(), SensorEventListener {
             config.gyroOnlyAdsOrFire = it
             config.save()
         }
+        addSwitch(body, "Invertir eje horizontal (X)", config.gyroInvertX) {
+            config.gyroInvertX = it
+            config.save()
+        }
         addSwitch(body, "Invertir eje vertical (Y)", config.gyroInvertY) {
             config.gyroInvertY = it
             config.save()
@@ -558,17 +562,20 @@ class OverlayService : Service(), SensorEventListener {
             lastGyroTs = event.timestamp
             return
         }
+        if (config.gyroOnlyAdsOrFire && !hv.isAdsOrFiringActive) {
+            lastGyroTs = event.timestamp
+            return
+        }
         if (lastGyroTs == 0L) {
             lastGyroTs = event.timestamp
             return
         }
         val dt = (event.timestamp - lastGyroTs) * 1e-9f
-    lastGyroTs = event.timestamp
+        lastGyroTs = event.timestamp
         if (dt <= 0f || dt > 0.1f) return
 
         val gx = event.values[0]
         val gy = event.values[1]
-
         val rot = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             hv.display?.rotation ?: tabView?.display?.rotation ?: Surface.ROTATION_90
         } else {
@@ -576,18 +583,17 @@ class OverlayService : Service(), SensorEventListener {
             wm.defaultDisplay.rotation
         }
 
-        // Ejes corregidos para modo horizontal (Landscape nativo)
         val yawRate: Float
         val pitchRate: Float
         when (rot) {
             Surface.ROTATION_90 -> {
-                yawRate = gx
+                yawRate = -gx
                 pitchRate = gy
             }
             Surface.ROTATION_270 -> {
-                yawRate = -gx
+                yawRate = gx
                 pitchRate = -gy
-            }
+                }
             Surface.ROTATION_180 -> {
                 yawRate = -gy
                 pitchRate = gx
@@ -597,13 +603,16 @@ class OverlayService : Service(), SensorEventListener {
                 pitchRate = -gx
             }
         }
+
         val dz = config.gyroDeadzone
         val cleanYaw = if (abs(yawRate) < dz) 0f else yawRate
         val cleanPitch = if (abs(pitchRate) < dz) 0f else pitchRate
         if (cleanYaw == 0f && cleanPitch == 0f) return
 
+        val xSign = if (config.gyroInvertX) -1f else 1f
         val ySign = if (config.gyroInvertY) -1f else 1f
-        val dx = cleanYaw * dt * config.gyroSensX * 12f
+
+        val dx = cleanYaw * dt * config.gyroSensX * 12f * xSign
         val dy = cleanPitch * dt * config.gyroSensY * 12f * ySign
 
         VirtualHidController.addMouseDelta(dx, dy)
