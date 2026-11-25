@@ -31,6 +31,9 @@ object VirtualHidController {
     var lastStatus: String = "Sin conectar"
         private set
 
+    var screenWidth = 2400f
+    var screenHeight = 1080f
+
     private val heldBySource = LinkedHashMap<String, Pair<Int, Set<Int>>>()
     private val mouseSources = LinkedHashMap<String, Int>()
     private var currentMouseButtons = 0
@@ -38,8 +41,6 @@ object VirtualHidController {
     private var lastModifiers = 0
     private var lastMouseButtons = 0
 
-    private var mouseX = 960f
-    private var mouseY = 540f
     private var accDx = 0f
     private var accDy = 0f
     private val lock = Any()
@@ -245,9 +246,6 @@ object VirtualHidController {
         injectEvent(ke)
     }
 
-    var screenWidth = 2400f
-    var screenHeight = 1080f
-
     private fun injectMouse(buttons: Int, dx: Int, dy: Int) {
         val now = SystemClock.uptimeMillis()
         val cx = screenWidth / 2f
@@ -261,7 +259,6 @@ object VirtualHidController {
         val changed = buttons xor lastMouseButtons
         if (changed != 0) {
             val isDown = (buttons and changed) != 0
-            // El clic se hace siempre en el CENTRO de la pantalla para impactar en el juego
             val clickCoords = arrayOf(MotionEvent.PointerCoords().apply {
                 x = cx
                 y = cy
@@ -279,8 +276,6 @@ object VirtualHidController {
         }
 
         if (dx != 0 || dy != 0) {
-            // Se envía el movimiento relativo desde el centro hacia (cx + dx, cy + dy)
-            // de modo que el cursor nunca toque los bordes de la pantalla
             val moveCoords = arrayOf(MotionEvent.PointerCoords().apply {
                 x = cx + dx.toFloat()
                 y = cy + dy.toFloat()
@@ -297,6 +292,7 @@ object VirtualHidController {
             ev.recycle()
         }
     }
+
     private fun hidToAndroidKeyCode(hid: Int): Int = when (hid) {
         0x04 -> KeyEvent.KEYCODE_A
         0x06 -> KeyEvent.KEYCODE_C
