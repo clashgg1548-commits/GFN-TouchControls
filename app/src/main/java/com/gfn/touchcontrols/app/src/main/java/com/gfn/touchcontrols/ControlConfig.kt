@@ -90,6 +90,7 @@ class ControlConfig(context: Context) {
     var gyroSensX: Float = 20.0f
     var gyroSensY: Float = 18.0f
     var gyroDeadzone: Float = 0.02f
+    var gyroInvertX: Boolean = false
     var gyroInvertY: Boolean = false
     var autoSprint: Boolean = true
     var aimToggleMode: Boolean = false
@@ -116,6 +117,7 @@ class ControlConfig(context: Context) {
             gyroSensX = root.optDouble("gyroSensX", 20.0).toFloat()
             gyroSensY = root.optDouble("gyroSensY", 18.0).toFloat()
             gyroDeadzone = root.optDouble("gyroDeadzone", 0.02).toFloat()
+            gyroInvertX = root.optBoolean("gyroInvertX", false)
             gyroInvertY = root.optBoolean("gyroInvertY", false)
             autoSprint = root.optBoolean("autoSprint", true)
             aimToggleMode = root.optBoolean("aimToggleMode", false)
@@ -146,6 +148,7 @@ class ControlConfig(context: Context) {
         root.put("gyroSensX", gyroSensX.toDouble())
         root.put("gyroSensY", gyroSensY.toDouble())
         root.put("gyroDeadzone", gyroDeadzone.toDouble())
+        root.put("gyroInvertX", gyroInvertX)
         root.put("gyroInvertY", gyroInvertY)
         root.put("autoSprint", autoSprint)
         root.put("aimToggleMode", aimToggleMode)
@@ -175,6 +178,7 @@ class ControlConfig(context: Context) {
         gyroSensX = 20.0f
         gyroSensY = 18.0f
         gyroDeadzone = 0.02f
+        gyroInvertX = false
         gyroInvertY = false
         autoSprint = true
         aimToggleMode = false
