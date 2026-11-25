@@ -158,7 +158,7 @@ class GameOverlayView(
     ) {
         val a255 = (alpha * 255).toInt().coerceIn(15, 255)
 
-        // 1. Aro base de cristal exterior
+        // Aro exterior de cristal
         val baseGradient = RadialGradient(
             cx, cy, r,
             intArrayOf(
@@ -179,13 +179,12 @@ class GameOverlayView(
         glassStrokePaint.strokeWidth = dp(1.8f)
         canvas.drawCircle(cx, cy, r, glassStrokePaint)
 
-        // 2. Perilla central estilo orbe de vidrio líquido
+        // Perilla central estilo orbe de cristal líquido
         val maxDist = r * 0.62f
         val kx = cx + joyDx * maxDist
         val ky = cy + joyDy * maxDist
         val kr = r * 0.38f
 
-        // Gradiente tridimensional del orbe de cristal
         val knobGradient = RadialGradient(
             kx - kr * 0.35f, ky - kr * 0.35f, kr * 1.25f,
             intArrayOf(
@@ -199,7 +198,7 @@ class GameOverlayView(
         glassFillPaint.shader = knobGradient
         canvas.drawCircle(kx, ky, kr, glassFillPaint)
 
-        // Reflejo curvo superior (brillo de vidrio)
+        // Reflejo curvo superior (brillo 3D)
         highlightRect.set(kx - kr * 0.65f, ky - kr * 0.75f, kx + kr * 0.65f, ky - kr * 0.1f)
         specularPaint.color = Color.WHITE
         specularPaint.alpha = (a255 * 0.65f).toInt()
@@ -226,7 +225,6 @@ class GameOverlayView(
         val hBox = r * 1.08f
         tempRect.set(cx - wBox, cy - hBox, cx + wBox, cy + hBox)
 
-        // Fondo cápsula de vidrio translúcido con tinte violeta BitChord
         val trackGradient = LinearGradient(
             cx, cy - hBox, cx, cy + hBox,
             intArrayOf(
@@ -240,19 +238,16 @@ class GameOverlayView(
         glassFillPaint.shader = trackGradient
         canvas.drawRoundRect(tempRect, dp(22f), dp(22f), glassFillPaint)
 
-        // Borde especular de cristal
         glassStrokePaint.shader = null
         glassStrokePaint.color = Color.argb((a255 * 0.85f).toInt(), 255, 255, 255)
         glassStrokePaint.strokeWidth = dp(1.6f)
         canvas.drawRoundRect(tempRect, dp(22f), dp(22f), glassStrokePaint)
 
-        // Brillo de reflexión superior
         highlightRect.set(cx - wBox + dp(14f), cy - hBox + dp(3f), cx + wBox - dp(14f), cy - hBox + dp(16f))
         specularPaint.color = Color.WHITE
         specularPaint.alpha = (a255 * 0.28f).toInt()
         canvas.drawRoundRect(highlightRect, dp(8f), dp(8f), specularPaint)
 
-        // Retícula central minimalista
         glassStrokePaint.color = Color.WHITE
         glassStrokePaint.alpha = (a255 * 0.35f).toInt()
         glassStrokePaint.strokeWidth = dp(1.2f)
@@ -277,7 +272,6 @@ class GameOverlayView(
         val isPressed = pressedButtons.contains(st.id) || (st.id == ControlId.AIM && aimToggled)
         val a255 = (alpha * 255).toInt().coerceIn(15, 255)
 
-        // 1. Cuerpo de cristal con gradiente vertical translúcido
         val (topColor, midColor, botColor) = when {
             isPressed -> Triple(
                 Color.argb(230, 224, 170, 255),
@@ -310,13 +304,13 @@ class GameOverlayView(
         glassFillPaint.shader = buttonGradient
         canvas.drawCircle(cx, cy, r, glassFillPaint)
 
-        // 2. Reflejo especular superior curvado (efecto domo de cristal de Apple/BitChord)
+        // Reflejo especular superior
         highlightRect.set(cx - r * 0.65f, cy - r * 0.85f, cx + r * 0.65f, cy - r * 0.15f)
         specularPaint.color = Color.WHITE
         specularPaint.alpha = if (isPressed) 180 else (a255 * 0.40f).toInt()
         canvas.drawOval(highlightRect, specularPaint)
 
-        // 3. Borde perimetral de cristal
+        // Borde perimetral de cristal
         glassStrokePaint.shader = null
         glassStrokePaint.color = when {
             isPressed -> Color.WHITE
@@ -328,7 +322,7 @@ class GameOverlayView(
         glassStrokePaint.strokeWidth = dp(1.8f)
         canvas.drawCircle(cx, cy, r, glassStrokePaint)
 
-        // 4. Ícono vectorial
+        // Ícono vectorial
         iconPaint.color = if (isPressed) Color.BLACK else Color.WHITE
         iconPaint.alpha = if (isPressed) 240 else a255
         iconPaint.strokeWidth = dp(2f)
@@ -337,7 +331,7 @@ class GameOverlayView(
 
         drawVectorIcon(canvas, st, cx, cy, r * 0.48f)
 
-        // 5. Etiqueta pequeña (tecla o número)
+        // Etiqueta tecla
         badgePaint.color = if (isPressed) Color.BLACK else Color.WHITE
         badgePaint.alpha = if (isPressed) 240 else (a255 * 0.85f).toInt()
         badgePaint.textSize = (r * 0.28f).coerceAtLeast(dp(8.5f))
