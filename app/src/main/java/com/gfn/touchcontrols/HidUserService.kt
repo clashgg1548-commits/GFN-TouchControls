@@ -14,7 +14,11 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.system.exitProcess
 
-class HidUserService : IHidService.Stub() {
+import androidx.annotation.Keep
+
+@Keep
+class HidUserService() : IHidService.Stub() {
+    constructor(context: android.content.Context) : this()
 
     companion object {
         private const val TAG = "GFN_HidService"
