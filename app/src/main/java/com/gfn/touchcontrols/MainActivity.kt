@@ -28,16 +28,12 @@ class MainActivity : AppCompatActivity() {
             VirtualHidController.bind(this)
         }
         refreshStatus()
-        val crash = getSharedPreferences("gfn_controls_prefs", MODE_PRIVATE)
-                .getString("last_crash", null)
-            if (!crash.isNullOrBlank()) {
-                append("\n\nÚltimo error:\n")
-                append(crash.take(700))
-            }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-val oldHandler = Thread.getDefaultUncaughtExceptionHandler()
+
+        val oldHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             getSharedPreferences("gfn_controls_prefs", MODE_PRIVATE)
                 .edit()
@@ -45,6 +41,7 @@ val oldHandler = Thread.getDefaultUncaughtExceptionHandler()
                 .commit()
             oldHandler?.uncaughtException(thread, throwable)
         }
+
         Shizuku.addRequestPermissionResultListener(shizukuPermissionListener)
         VirtualHidController.statusListener = {
             runOnUiThread { refreshStatus() }
@@ -216,6 +213,12 @@ val oldHandler = Thread.getDefaultUncaughtExceptionHandler()
             append("Shizuku activo: ${if (shizukuAlive) "Sí ✅" else "No (abrí Shizuku) ❌"}\n")
             append("Permiso Shizuku: ${if (shizukuPerm) "OK ✅" else "Falta ❌"}\n")
             append("Teclado/Mouse Virtual: ${VirtualHidController.lastStatus}")
+            val crash = getSharedPreferences("gfn_controls_prefs", MODE_PRIVATE)
+                .getString("last_crash", null)
+            if (!crash.isNullOrBlank()) {
+                append("\n\nÚltimo error:\n")
+                append(crash.take(700))
+            }
         }
         btnStart.text = if (OverlayService.isRunning) {
             "Detener Overlay Flotante"
