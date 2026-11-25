@@ -32,7 +32,14 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
+val oldHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            getSharedPreferences("gfn_controls_prefs", MODE_PRIVATE)
+                .edit()
+                .putString("last_crash", android.util.Log.getStackTraceString(throwable))
+                .commit()
+            oldHandler?.uncaughtException(thread, throwable)
+        }
         Shizuku.addRequestPermissionResultListener(shizukuPermissionListener)
         VirtualHidController.statusListener = {
             runOnUiThread { refreshStatus() }
