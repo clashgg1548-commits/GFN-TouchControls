@@ -68,8 +68,10 @@ class GameOverlayView(
 
     private val density = resources.displayMetrics.density
 
-    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    // Pinturas para el renderizado Liquid Glass
+    private val glassFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val glassStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    private val specularPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
@@ -86,6 +88,7 @@ class GameOverlayView(
     }
 
     private val tempRect = RectF()
+    private val highlightRect = RectF()
     private val tempPath = Path()
 
     private fun dp(v: Float): Float = v * density
@@ -122,166 +125,147 @@ class GameOverlayView(
             val itemAlpha = if (!st.visible && editMode) 0.25f else baseAlpha
 
             when (id) {
-                ControlId.JOYSTICK -> drawLiquidJoystick(canvas, cx, cy, r, itemAlpha)
-                ControlId.TRACKPAD -> drawLiquidTrackpad(canvas, cx, cy, r, itemAlpha)
+                ControlId.JOYSTICK -> drawLiquidJoystick(canvas, cx, cy, r, itemAlpha, st)
+                ControlId.TRACKPAD -> drawLiquidTrackpad(canvas, cx, cy, r, itemAlpha, st)
                 else -> drawLiquidActionButton(canvas, cx, cy, r, itemAlpha, st)
             }
 
             if (editMode && id == selectedEditId) {
-                strokePaint.shader = null
-                strokePaint.color = Color.parseColor("#00E5FF")
-                strokePaint.strokeWidth = dp(2.5f)
-                strokePaint.alpha = 240
+                glassStrokePaint.shader = null
+                glassStrokePaint.color = Color.parseColor("#E0AAFF")
+                glassStrokePaint.strokeWidth = dp(2.8f)
+                glassStrokePaint.alpha = 255
                 if (id == ControlId.TRACKPAD) {
                     val wBox = r * 1.5f
                     val hBox = r * 1.1f
                     tempRect.set(cx - wBox, cy - hBox, cx + wBox, cy + hBox)
-                    canvas.drawRoundRect(tempRect, dp(22f), dp(22f), strokePaint)
+                    canvas.drawRoundRect(tempRect, dp(22f), dp(22f), glassStrokePaint)
                 } else {
-                    canvas.drawCircle(cx, cy, r + dp(5f), strokePaint)
+                    canvas.drawCircle(cx, cy, r + dp(5f), glassStrokePaint)
                 }
             }
         }
     }
 
-    // --- JOYSTICK 100% LIMPIO ESTILO LIQUID GLASS (SIN WASD) ---
+    // --- JOYSTICK LIMPIO LIQUID GLASS (SIN LETRAS WASD) ---
     private fun drawLiquidJoystick(
         canvas: Canvas,
         cx: Float,
         cy: Float,
         r: Float,
-        alpha: Float
+        alpha: Float,
+        st: ControlItemState
     ) {
-        val a255 = (alpha * 255).toInt().coerceIn(20, 255)
+        val a255 = (alpha * 255).toInt().coerceIn(15, 255)
 
-        // 1. Base exterior cóncava de cristal ahumado
-        fillPaint.shader = RadialGradient(
+        // 1. Aro base de cristal exterior
+        val baseGradient = RadialGradient(
             cx, cy, r,
             intArrayOf(
-                Color.argb((a255 * 0.15f).toInt(), 255, 255, 255),
-                Color.argb((a255 * 0.38f).toInt(), 12, 16, 26),
-                Color.argb((a255 * 0.60f).toInt(), 6, 8, 14)
+                Color.argb((a255 * 0.18f).toInt(), 180, 140, 255),
+                Color.argb((a255 * 0.42f).toInt(), 20, 16, 32),
+                Color.argb((a255 * 0.58f).toInt(), 12, 10, 20)
             ),
-            floatArrayOf(0.0f, 0.70f, 1.0f),
+            floatArrayOf(0.0f, 0.75f, 1.0f),
             Shader.TileMode.CLAMP
         )
-        canvas.drawCircle(cx, cy, r, fillPaint)
+        glassFillPaint.shader = baseGradient
+        canvas.drawCircle(cx, cy, r, glassFillPaint)
 
-        // 2. Anillo de cristal exterior con reflejo superior ("Rim Light")
-        strokePaint.shader = LinearGradient(
-            cx, cy - r, cx, cy + r,
-            intArrayOf(
-                Color.argb((a255 * 0.75f).toInt(), 255, 255, 255),
-                Color.argb((a255 * 0.20f).toInt(), 180, 210, 255),
-                Color.argb((a255 * 0.10f).toInt(), 255, 255, 255)
-            ),
-            floatArrayOf(0.0f, 0.5f, 1.0f),
-            Shader.TileMode.CLAMP
-        )
-        strokePaint.strokeWidth = dp(1.8f)
-        canvas.drawCircle(cx, cy, r, strokePaint)
+        // Borde fino de cristal con brillo especular
+        glassStrokePaint.shader = null
+        glassStrokePaint.color = if (joySprinting) Color.parseColor("#E0AAFF") else Color.WHITE
+        glassStrokePaint.alpha = if (joySprinting) 240 else (a255 * 0.65f).toInt()
+        glassStrokePaint.strokeWidth = dp(1.8f)
+        canvas.drawCircle(cx, cy, r, glassStrokePaint)
 
-        // 3. Anillo concéntrico interno minimalista (guía sutil)
-        strokePaint.shader = null
-        strokePaint.color = if (joySprinting) Color.parseColor("#FFD54F") else Color.WHITE
-        strokePaint.alpha = (a255 * 0.20f).toInt()
-        strokePaint.strokeWidth = dp(1f)
-        canvas.drawCircle(cx, cy, r * 0.60f, strokePaint)
-
-        // 4. Perilla (Knob) de cristal 3D con luz especular
+        // 2. Perilla central estilo orbe de vidrio líquido
         val maxDist = r * 0.62f
         val kx = cx + joyDx * maxDist
         val ky = cy + joyDy * maxDist
         val kr = r * 0.38f
 
-        // Sombra de cristal de la perilla
-        fillPaint.shader = null
-        fillPaint.color = Color.argb((a255 * 0.45f).toInt(), 0, 0, 0)
-        canvas.drawCircle(kx, ky + dp(3f), kr, fillPaint)
-
-        // Vidrio con luz radial arriba a la izquierda
-        fillPaint.shader = RadialGradient(
-            kx - kr * 0.35f, ky - kr * 0.35f, kr * 1.3f,
+        // Gradiente tridimensional del orbe de cristal
+        val knobGradient = RadialGradient(
+            kx - kr * 0.35f, ky - kr * 0.35f, kr * 1.25f,
             intArrayOf(
-                if (joySprinting) Color.argb(a255, 255, 238, 150) else Color.argb((a255 * 0.95f).toInt(), 245, 250, 255),
-                if (joySprinting) Color.argb(a255, 255, 179, 0) else Color.argb((a255 * 0.65f).toInt(), 120, 160, 210),
-                Color.argb((a255 * 0.85f).toInt(), 18, 26, 42)
+                Color.argb((a255 * 0.95f).toInt(), 255, 255, 255),
+                Color.argb((a255 * 0.70f).toInt(), 199, 125, 255),
+                Color.argb((a255 * 0.85f).toInt(), 42, 28, 64)
             ),
             floatArrayOf(0.0f, 0.45f, 1.0f),
             Shader.TileMode.CLAMP
         )
-        canvas.drawCircle(kx, ky, kr, fillPaint)
+        glassFillPaint.shader = knobGradient
+        canvas.drawCircle(kx, ky, kr, glassFillPaint)
 
-        // Borde fino de cristal en la perilla
-        strokePaint.shader = LinearGradient(
-            kx, ky - kr, kx, ky + kr,
-            intArrayOf(
-                Color.argb(a255, 255, 255, 255),
-                Color.argb((a255 * 0.3f).toInt(), 255, 255, 255)
-            ),
-            null,
-            Shader.TileMode.CLAMP
-        )
-        strokePaint.strokeWidth = dp(1.5f)
-        canvas.drawCircle(kx, ky, kr, strokePaint)
+        // Reflejo curvo superior (brillo de vidrio)
+        highlightRect.set(kx - kr * 0.65f, ky - kr * 0.75f, kx + kr * 0.65f, ky - kr * 0.1f)
+        specularPaint.color = Color.WHITE
+        specularPaint.alpha = (a255 * 0.65f).toInt()
+        canvas.drawOval(highlightRect, specularPaint)
+
+        // Borde brillante de la perilla
+        glassStrokePaint.color = Color.WHITE
+        glassStrokePaint.alpha = (a255 * 0.90f).toInt()
+        glassStrokePaint.strokeWidth = dp(1.6f)
+        canvas.drawCircle(kx, ky, kr, glassStrokePaint)
     }
 
-    // --- TRACKPAD ESTILO LOSA DE CRISTAL ESMERILADO (FROSTED GLASS) ---
+    // --- TRACKPAD DE MIRA LIQUID GLASS ---
     private fun drawLiquidTrackpad(
         canvas: Canvas,
         cx: Float,
         cy: Float,
         r: Float,
-        alpha: Float
+        alpha: Float,
+        st: ControlItemState
     ) {
-        val a255 = (alpha * 255).toInt().coerceIn(20, 255)
-        val wBox = r * 1.45f
-        val hBox = r * 1.05f
+        val a255 = (alpha * 255).toInt().coerceIn(15, 255)
+        val wBox = r * 1.48f
+        val hBox = r * 1.08f
         tempRect.set(cx - wBox, cy - hBox, cx + wBox, cy + hBox)
 
-        // Degradado de cristal templado oscuro
-        fillPaint.shader = LinearGradient(
-            cx - wBox, cy - hBox, cx + wBox, cy + hBox,
-            intArrayOf(
-                Color.argb((a255 * 0.28f).toInt(), 160, 190, 240),
-                Color.argb((a255 * 0.35f).toInt(), 14, 18, 28),
-                Color.argb((a255 * 0.50f).toInt(), 8, 10, 16)
-            ),
-            floatArrayOf(0.0f, 0.4f, 1.0f),
-            Shader.TileMode.CLAMP
-        )
-        canvas.drawRoundRect(tempRect, dp(22f), dp(22f), fillPaint)
-
-        // Borde superior iluminado (Rim Light)
-        strokePaint.shader = LinearGradient(
+        // Fondo cápsula de vidrio translúcido con tinte violeta BitChord
+        val trackGradient = LinearGradient(
             cx, cy - hBox, cx, cy + hBox,
             intArrayOf(
-                Color.argb((a255 * 0.70f).toInt(), 255, 255, 255),
-                Color.argb((a255 * 0.25f).toInt(), 100, 180, 255),
-                Color.argb((a255 * 0.12f).toInt(), 255, 255, 255)
+                Color.argb((a255 * 0.45f).toInt(), 60, 45, 90),
+                Color.argb((a255 * 0.28f).toInt(), 22, 18, 36),
+                Color.argb((a255 * 0.50f).toInt(), 14, 12, 24)
             ),
-            null,
+            floatArrayOf(0.0f, 0.5f, 1.0f),
             Shader.TileMode.CLAMP
         )
-        strokePaint.strokeWidth = dp(1.6f)
-        canvas.drawRoundRect(tempRect, dp(22f), dp(22f), strokePaint)
+        glassFillPaint.shader = trackGradient
+        canvas.drawRoundRect(tempRect, dp(22f), dp(22f), glassFillPaint)
 
-        // Retícula central de precisión
-        strokePaint.shader = null
-        strokePaint.color = Color.WHITE
-        strokePaint.alpha = (a255 * 0.28f).toInt()
-        strokePaint.strokeWidth = dp(1.2f)
-        canvas.drawLine(cx - dp(14f), cy, cx + dp(14f), cy, strokePaint)
-        canvas.drawLine(cx, cy - dp(14f), cx, cy + dp(14f), strokePaint)
+        // Borde especular de cristal
+        glassStrokePaint.shader = null
+        glassStrokePaint.color = Color.argb((a255 * 0.85f).toInt(), 255, 255, 255)
+        glassStrokePaint.strokeWidth = dp(1.6f)
+        canvas.drawRoundRect(tempRect, dp(22f), dp(22f), glassStrokePaint)
 
-        textPaint.shader = null
+        // Brillo de reflexión superior
+        highlightRect.set(cx - wBox + dp(14f), cy - hBox + dp(3f), cx + wBox - dp(14f), cy - hBox + dp(16f))
+        specularPaint.color = Color.WHITE
+        specularPaint.alpha = (a255 * 0.28f).toInt()
+        canvas.drawRoundRect(highlightRect, dp(8f), dp(8f), specularPaint)
+
+        // Retícula central minimalista
+        glassStrokePaint.color = Color.WHITE
+        glassStrokePaint.alpha = (a255 * 0.35f).toInt()
+        glassStrokePaint.strokeWidth = dp(1.2f)
+        canvas.drawLine(cx - dp(16f), cy, cx + dp(16f), cy, glassStrokePaint)
+        canvas.drawLine(cx, cy - dp(16f), cx, cy + dp(16f), cy, glassStrokePaint)
+
         textPaint.color = Color.WHITE
         textPaint.alpha = (a255 * 0.65f).toInt()
         textPaint.textSize = dp(10.5f)
-        canvas.drawText("TRACKPAD MIRA", cx, cy + hBox - dp(12f), textPaint)
+        canvas.drawText("TRACKPAD MIRA", cx, cy + hBox - dp(10f), textPaint)
     }
 
-    // --- BOTONES CON CRISTAL LÍQUIDO Y BRILLO BISORT ---
+    // --- BOTONES DE ACCIÓN LIQUID GLASS ---
     private fun drawLiquidActionButton(
         canvas: Canvas,
         cx: Float,
@@ -291,74 +275,74 @@ class GameOverlayView(
         st: ControlItemState
     ) {
         val isPressed = pressedButtons.contains(st.id) || (st.id == ControlId.AIM && aimToggled)
-        val a255 = (alpha * 255).toInt().coerceIn(20, 255)
+        val a255 = (alpha * 255).toInt().coerceIn(15, 255)
 
-        // Relleno de cristal
-        if (isPressed) {
-            // Cristal comprimido iluminado desde adentro
-            fillPaint.shader = RadialGradient(
-                cx, cy, r,
-                intArrayOf(
-                    Color.argb((a255 * 0.95f).toInt(), 0, 229, 255),
-                    Color.argb((a255 * 0.75f).toInt(), 24, 70, 130),
-                    Color.argb((a255 * 0.85f).toInt(), 8, 16, 32)
-                ),
-                floatArrayOf(0.0f, 0.65f, 1.0f),
-                Shader.TileMode.CLAMP
+        // 1. Cuerpo de cristal con gradiente vertical translúcido
+        val (topColor, midColor, botColor) = when {
+            isPressed -> Triple(
+                Color.argb(230, 224, 170, 255),
+                Color.argb(200, 157, 78, 221),
+                Color.argb(220, 90, 24, 154)
             )
-        } else {
-            // Vidrio translúcido reposado con degradado de luz superior
-            val isFire = st.id == ControlId.FIRE || st.id == ControlId.FIRE_LEFT
-            val isAim = st.id == ControlId.AIM
-            val tintR = if (isFire) 255 else if (isAim) 80 else 180
-            val tintG = if (isFire) 110 else if (isAim) 180 else 200
-            val tintB = if (isFire) 64 else if (isAim) 255 else 235
-
-            fillPaint.shader = LinearGradient(
-                cx, cy - r, cx, cy + r,
-                intArrayOf(
-                    Color.argb((a255 * 0.32f).toInt(), tintR, tintG, tintB),
-                    Color.argb((a255 * 0.38f).toInt(), 20, 26, 40),
-                    Color.argb((a255 * 0.62f).toInt(), 8, 12, 20)
-                ),
-                floatArrayOf(0.0f, 0.45f, 1.0f),
-                Shader.TileMode.CLAMP
+            st.id == ControlId.FIRE || st.id == ControlId.FIRE_LEFT -> Triple(
+                Color.argb((a255 * 0.70f).toInt(), 120, 50, 80),
+                Color.argb((a255 * 0.40f).toInt(), 60, 24, 40),
+                Color.argb((a255 * 0.60f).toInt(), 35, 14, 25)
+            )
+            st.id == ControlId.AIM -> Triple(
+                Color.argb((a255 * 0.70f).toInt(), 70, 60, 130),
+                Color.argb((a255 * 0.40f).toInt(), 35, 28, 70),
+                Color.argb((a255 * 0.60f).toInt(), 20, 16, 42)
+            )
+            else -> Triple(
+                Color.argb((a255 * 0.55f).toInt(), 70, 60, 95),
+                Color.argb((a255 * 0.30f).toInt(), 30, 24, 45),
+                Color.argb((a255 * 0.50f).toInt(), 18, 14, 28)
             )
         }
-        canvas.drawCircle(cx, cy, r, fillPaint)
 
-        // Borde de cristal biselado con reflejo luminoso
-        strokePaint.shader = LinearGradient(
+        val buttonGradient = LinearGradient(
             cx, cy - r, cx, cy + r,
-            intArrayOf(
-                if (isPressed) Color.WHITE else Color.argb((a255 * 0.85f).toInt(), 255, 255, 255),
-                if (isPressed) Color.argb(a255, 0, 229, 255) else Color.argb((a255 * 0.25f).toInt(), 160, 200, 255),
-                Color.argb((a255 * 0.12f).toInt(), 255, 255, 255)
-            ),
+            intArrayOf(topColor, midColor, botColor),
             floatArrayOf(0.0f, 0.55f, 1.0f),
             Shader.TileMode.CLAMP
         )
-        strokePaint.strokeWidth = dp(1.6f)
-        canvas.drawCircle(cx, cy, r, strokePaint)
+        glassFillPaint.shader = buttonGradient
+        canvas.drawCircle(cx, cy, r, glassFillPaint)
 
-        // Íconos nítidos
-        iconPaint.shader = null
-        iconPaint.color = if (isPressed) Color.WHITE else Color.WHITE
-        iconPaint.alpha = if (isPressed) 255 else (a255 * 0.95f).toInt()
-        iconPaint.strokeWidth = dp(1.9f)
-        iconFillPaint.shader = null
+        // 2. Reflejo especular superior curvado (efecto domo de cristal de Apple/BitChord)
+        highlightRect.set(cx - r * 0.65f, cy - r * 0.85f, cx + r * 0.65f, cy - r * 0.15f)
+        specularPaint.color = Color.WHITE
+        specularPaint.alpha = if (isPressed) 180 else (a255 * 0.40f).toInt()
+        canvas.drawOval(highlightRect, specularPaint)
+
+        // 3. Borde perimetral de cristal
+        glassStrokePaint.shader = null
+        glassStrokePaint.color = when {
+            isPressed -> Color.WHITE
+            st.id == ControlId.FIRE || st.id == ControlId.FIRE_LEFT -> Color.parseColor("#FF8A80")
+            st.id == ControlId.AIM -> Color.parseColor("#B388FF")
+            else -> Color.argb((a255 * 0.85f).toInt(), 255, 255, 255)
+        }
+        glassStrokePaint.alpha = if (isPressed) 255 else (a255 * 0.80f).toInt()
+        glassStrokePaint.strokeWidth = dp(1.8f)
+        canvas.drawCircle(cx, cy, r, glassStrokePaint)
+
+        // 4. Ícono vectorial
+        iconPaint.color = if (isPressed) Color.BLACK else Color.WHITE
+        iconPaint.alpha = if (isPressed) 240 else a255
+        iconPaint.strokeWidth = dp(2f)
         iconFillPaint.color = iconPaint.color
         iconFillPaint.alpha = iconPaint.alpha
 
-        drawVectorIcon(canvas, st, cx, cy, r * 0.46f)
+        drawVectorIcon(canvas, st, cx, cy, r * 0.48f)
 
-        // Badge / tecla con brillo sutil
+        // 5. Etiqueta pequeña (tecla o número)
+        badgePaint.color = if (isPressed) Color.BLACK else Color.WHITE
+        badgePaint.alpha = if (isPressed) 240 else (a255 * 0.85f).toInt()
+        badgePaint.textSize = (r * 0.28f).coerceAtLeast(dp(8.5f))
         if (st.id.icon != IconStyle.SLOT) {
-            badgePaint.shader = null
-            badgePaint.color = if (isPressed) Color.parseColor("#E0F7FA") else Color.WHITE
-            badgePaint.alpha = (a255 * 0.80f).toInt()
-            badgePaint.textSize = (r * 0.26f).coerceAtLeast(dp(8.5f))
-            canvas.drawText(st.id.badge, cx, cy + r * 0.73f, badgePaint)
+            canvas.drawText(st.id.badge, cx, cy + r * 0.72f, badgePaint)
         }
     }
 
@@ -452,14 +436,12 @@ class GameOverlayView(
                 canvas.drawCircle(cx, oy - s * 0.08f, s * 0.14f, iconFillPaint)
             }
             IconStyle.SLOT -> {
-                textPaint.shader = null
                 textPaint.color = iconPaint.color
                 textPaint.alpha = iconPaint.alpha
                 textPaint.textSize = s * 1.15f
                 canvas.drawText(st.id.badge, cx, cy + textPaint.textSize * 0.35f, textPaint)
             }
             IconStyle.MAP, IconStyle.TAB, IconStyle.ESC -> {
-                textPaint.shader = null
                 textPaint.color = iconPaint.color
                 textPaint.alpha = iconPaint.alpha
                 textPaint.textSize = s * 0.72f
@@ -504,8 +486,8 @@ class GameOverlayView(
             val r = radiusOf(st)
 
             if (id == ControlId.TRACKPAD) {
-                val wBox = r * 1.45f
-                val hBox = r * 1.05f
+                val wBox = r * 1.48f
+                val hBox = r * 1.08f
                 if (x >= cx - wBox && x <= cx + wBox && y >= cy - hBox && y <= cy + hBox) {
                     return st
                 }
@@ -530,6 +512,7 @@ class GameOverlayView(
             invalidate()
             return
         }
+
         val hit = hitTestControl(x, y, false)
         if (hit != null) {
             when (hit.id) {
