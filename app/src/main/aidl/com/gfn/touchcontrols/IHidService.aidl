@@ -5,5 +5,5 @@ interface IHidService {
     void closeHid();
     void sendKeyboard(int modifiers, in byte[] keys);
     void sendMouse(int buttons, int dx, int dy, int wheel);
-    void destroy();
+    void destroy() = 16777114;
 }
