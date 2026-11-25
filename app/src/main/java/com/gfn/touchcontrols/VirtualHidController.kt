@@ -8,10 +8,11 @@ import android.util.Log
 import android.view.InputDevice
 import android.view.InputEvent
 import android.view.KeyEvent
-import android.view.MotionEvent
 import rikka.shizuku.Shizuku
 import rikka.shizuku.ShizukuBinderWrapper
 import rikka.shizuku.SystemServiceHelper
+import java.io.BufferedWriter
+import java.io.OutputStreamWriter
 import java.lang.reflect.Method
 import java.util.concurrent.Executors
 import kotlin.math.roundToInt
@@ -24,15 +25,16 @@ object VirtualHidController {
     private var inputManager: Any? = null
     private var injectMethod: Method? = null
 
+    // Proceso nativo de ratón por hardware uinput
+    private var uinputProcess: Process? = null
+    private var uinputWriter: BufferedWriter? = null
+
     var isConnected = false
         private set
 
     var statusListener: ((String) -> Unit)? = null
     var lastStatus: String = "Sin conectar"
         private set
-
-    var screenWidth = 2400f
-    var screenHeight = 1080f
 
     private val heldBySource = LinkedHashMap<String, Pair<Int, Set<Int>>>()
     private val mouseSources = LinkedHashMap<String, Int>()
@@ -66,39 +68,50 @@ object VirtualHidController {
                 return false
             }
 
+            // 1. Teclado vía Shizuku Binder (ya comprobado que funciona 100%)
             val rawBinder = SystemServiceHelper.getSystemService("input")
-            if (rawBinder == null) {
-                updateStatus("Error: Servicio input no disponible")
-                isConnected = false
-                return false
+            if (rawBinder != null) {
+                val wrapper = ShizukuBinderWrapper(rawBinder)
+                val stubClass = Class.forName("android.hardware.input.IInputManager\$Stub")
+                val asInterface = stubClass.getMethod("asInterface", IBinder::class.java)
+                inputManager = asInterface.invoke(null, wrapper)
+                injectMethod = inputManager?.javaClass?.methods?.firstOrNull {
+                    it.name == "injectInputEvent" && it.parameterTypes.isNotEmpty() &&
+                        InputEvent::class.java.isAssignableFrom(it.parameterTypes[0])
+                }
             }
 
-            val wrapper = ShizukuBinderWrapper(rawBinder)
-            val stubClass = Class.forName("android.hardware.input.IInputManager\$Stub")
-            val asInterface = stubClass.getMethod("asInterface", IBinder::class.java)
-            val im = asInterface.invoke(null, wrapper)
+            // 2. Ratón FÍSICO real a nivel de kernel mediante /system/bin/uinput
+            initHardwareMouse()
 
-            val method = im.javaClass.methods.firstOrNull {
-                it.name == "injectInputEvent" && it.parameterTypes.isNotEmpty() &&
-                    InputEvent::class.java.isAssignableFrom(it.parameterTypes[0])
-            }
-
-            if (method == null) {
-                updateStatus("Error: injectInputEvent no encontrado")
-                isConnected = false
-                return false
-            }
-
-            inputManager = im
-            injectMethod = method
             isConnected = true
-            updateStatus("CONECTADO (Directo) ✅")
+            updateStatus("CONECTADO (Hardware Mouse) ✅")
             return true
         } catch (e: Throwable) {
             Log.e(TAG, "Error connect", e)
             updateStatus("Error: ${e.message}")
             isConnected = false
             return false
+        }
+    }
+
+    private fun initHardwareMouse() {
+        try {
+            uinputProcess?.destroy()
+            val proc = Shizuku.newProcess(arrayOf("/system/bin/uinput", "-"), null, null)
+            val writer = BufferedWriter(OutputStreamWriter(proc.outputStream))
+
+            // Registra un ratón USB real con clics (izquierdo, derecho, medio) y movimiento relativo X/Y
+            val regJson = "{\"id\":1,\"command\":\"register\",\"name\":\"GFN Hardware Mouse\",\"vid\":6225,\"pid\":20209,\"bus\":\"usb\",\"configuration\":[{\"type\":\"UI_SET_EVBIT\",\"data\":[\"EV_KEY\",\"EV_REL\"]},{\"type\":\"UI_SET_KEYBIT\",\"data\":[272,273,274]},{\"type\":\"UI_SET_RELBIT\",\"data\":[0,1,8]}]}"
+            writer.write(regJson)
+            writer.newLine()
+            writer.flush()
+
+            uinputProcess = proc
+            uinputWriter = writer
+            Log.i(TAG, "Ratón por hardware registrado exitosamente con uinput")
+        } catch (e: Throwable) {
+            Log.e(TAG, "Fallo al iniciar /system/bin/uinput", e)
         }
     }
 
@@ -172,7 +185,7 @@ object VirtualHidController {
             btnState = mask
         }
         executor.execute {
-            injectMouse(btnState, 0, 0)
+            injectHardwareMouse(btnState, 0, 0)
         }
     }
 
@@ -191,7 +204,7 @@ object VirtualHidController {
             btnState = currentMouseButtons
         }
         executor.execute {
-            injectMouse(btnState, sendX, sendY)
+            injectHardwareMouse(btnState, sendX, sendY)
         }
     }
 
@@ -205,7 +218,7 @@ object VirtualHidController {
         }
         executor.execute {
             injectKeyboard(0, ByteArray(6))
-            injectMouse(0, 0, 0)
+            injectHardwareMouse(0, 0, 0)
         }
     }
 
@@ -246,50 +259,39 @@ object VirtualHidController {
         injectEvent(ke)
     }
 
-    private fun injectMouse(buttons: Int, dx: Int, dy: Int) {
-        val now = SystemClock.uptimeMillis()
-        val cx = screenWidth / 2f
-        val cy = screenHeight / 2f
-
-        val props = arrayOf(MotionEvent.PointerProperties().apply {
-            id = 0
-            toolType = MotionEvent.TOOL_TYPE_MOUSE
-        })
-
-        val changed = buttons xor lastMouseButtons
-        if (changed != 0) {
-            val isDown = (buttons and changed) != 0
-            val clickCoords = arrayOf(MotionEvent.PointerCoords().apply {
-                x = cx
-                y = cy
-                setAxisValue(MotionEvent.AXIS_X, cx)
-                setAxisValue(MotionEvent.AXIS_Y, cy)
-            })
-            val action = if (isDown) MotionEvent.ACTION_DOWN else MotionEvent.ACTION_UP
-            val ev = MotionEvent.obtain(
-                now, now, action, 1, props, clickCoords, 0, buttons,
-                1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE, 0
-            )
-            injectEvent(ev)
-            ev.recycle()
-            lastMouseButtons = buttons
+    // Inyección de eventos físicos directos al kernel (uinput)
+    private fun injectHardwareMouse(buttons: Int, dx: Int, dy: Int) {
+        val writer = uinputWriter
+        if (writer == null) {
+            // Intento de reinicializar si se desconectó
+            initHardwareMouse()
+            return
         }
 
-        if (dx != 0 || dy != 0) {
-            val moveCoords = arrayOf(MotionEvent.PointerCoords().apply {
-                x = cx + dx.toFloat()
-                y = cy + dy.toFloat()
-                setAxisValue(MotionEvent.AXIS_X, cx + dx.toFloat())
-                setAxisValue(MotionEvent.AXIS_Y, cy + dy.toFloat())
-                setAxisValue(MotionEvent.AXIS_RELATIVE_X, dx.toFloat())
-                setAxisValue(MotionEvent.AXIS_RELATIVE_Y, dy.toFloat())
-            })
-            val ev = MotionEvent.obtain(
-                now, now, MotionEvent.ACTION_MOVE, 1, props, moveCoords, 0, buttons,
-                1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE, 0
-            )
-            injectEvent(ev)
-            ev.recycle()
+        val changed = buttons xor lastMouseButtons
+        try {
+            if (changed != 0) {
+                // Click izquierdo (LMB = 0x01 -> BTN_LEFT 272)
+                if ((changed and 0x01) != 0) {
+                    val v = if ((buttons and 0x01) != 0) 1 else 0
+                    writer.write("{\"id\":1,\"command\":\"inject\",\"events\":[1,272,$v,0,0,0]}\n")
+                }
+                // Click derecho / apuntar (RMB = 0x02 -> BTN_RIGHT 273)
+                if ((changed and 0x02) != 0) {
+                    val v = if ((buttons and 0x02) != 0) 1 else 0
+                    writer.write("{\"id\":1,\"command\":\"inject\",\"events\":[1,273,$v,0,0,0]}\n")
+                }
+                lastMouseButtons = buttons
+            }
+
+            // Movimiento relativo de ratón al kernel: EV_REL (2), REL_X (0), REL_Y (1), EV_SYN (0)
+            if (dx != 0 || dy != 0) {
+                writer.write("{\"id\":1,\"command\":\"inject\",\"events\":[2,0,$dx,2,1,$dy,0,0,0]}\n")
+            }
+            writer.flush()
+        } catch (e: Throwable) {
+            Log.e(TAG, "Error escribiendo a uinput", e)
+            initHardwareMouse()
         }
     }
 
