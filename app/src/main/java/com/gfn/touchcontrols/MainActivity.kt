@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -25,7 +26,7 @@ class MainActivity : AppCompatActivity() {
 
     private val shizukuPermissionListener = Shizuku.OnRequestPermissionResultListener { _, grantResult ->
         if (grantResult == PackageManager.PERMISSION_GRANTED) {
-            VirtualHidController.bind(this)
+            VirtualHidController.connect(this)
         }
         refreshStatus()
     }
@@ -33,18 +34,13 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val oldHandler = Thread.getDefaultUncaughtExceptionHandler()
-        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            getSharedPreferences("gfn_controls_prefs", MODE_PRIVATE)
-                .edit()
-                .putString("last_crash", android.util.Log.getStackTraceString(throwable))
-                .commit()
-            oldHandler?.uncaughtException(thread, throwable)
-        }
-
         Shizuku.addRequestPermissionResultListener(shizukuPermissionListener)
         VirtualHidController.statusListener = {
             runOnUiThread { refreshStatus() }
+        }
+
+        if (Shizuku.pingBinder() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+            VirtualHidController.connect(this)
         }
 
         val d = resources.displayMetrics.density
@@ -52,71 +48,73 @@ class MainActivity : AppCompatActivity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(pad, (36 * d).toInt(), pad, pad)
-            setBackgroundColor(Color.parseColor("#0F131A"))
+            setPadding(pad, (40 * d).toInt(), pad, (32 * d).toInt())
+            setBackgroundColor(Color.parseColor("#080B11"))
         }
 
+        // Título con estilo moderno
         val title = TextView(this).apply {
-            text = "GFN Touch Controls + Gyro"
-            textSize = 22f
+            text = "GFN Touch Controls"
+            textSize = 23f
             setTextColor(Color.WHITE)
             setTypeface(null, android.graphics.Typeface.BOLD)
         }
         val subtitle = TextView(this).apply {
-            text = "Controles estilo shooter móvil + giroscopio RAW para GeForce Now (Battlefield)"
+            text = "Liquid Glass HUD • Hardware Mouse & Gyro para Battlefield"
             textSize = 13.5f
             setTextColor(Color.parseColor("#90A4AE"))
-            setPadding(0, (6 * d).toInt(), 0, (18 * d).toInt())
+            setPadding(0, (6 * d).toInt(), 0, (20 * d).toInt())
         }
 
+        // Tarjeta de estado con vidrio esmerilado
         tvStatus = TextView(this).apply {
-            textSize = 14f
-            setTextColor(Color.parseColor("#80D8FF"))
-            setPadding((14 * d).toInt(), (14 * d).toInt(), (14 * d).toInt(), (14 * d).toInt())
-            setBackgroundColor(Color.parseColor("#181E29"))
-        }
-
-        val btnPermOverlay = Button(this).apply {
-            text = "1. Dar permiso 'Mostrar sobre otras apps'"
-            setOnClickListener {
-                val i = Intent(
-                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:$packageName")
+            textSize = 13.5f
+            setTextColor(Color.parseColor("#E0F7FA"))
+            setPadding((16 * d).toInt(), (14 * d).toInt(), (16 * d).toInt(), (14 * d).toInt())
+            background = GradientDrawable().apply {
+                colors = intArrayOf(
+                    Color.argb(160, 24, 32, 50),
+                    Color.argb(220, 12, 16, 26)
                 )
-                startActivity(i)
+                gradientType = GradientDrawable.LINEAR_GRADIENT
+                orientation = GradientDrawable.Orientation.TOP_BOTTOM
+                cornerRadius = 18 * d
+                setStroke((1.3f * d).toInt(), Color.argb(130, 200, 230, 255))
             }
         }
 
-        val btnPermShizuku = Button(this).apply {
-            text = "2. Conectar y autorizar Shizuku (/dev/uhid)"
-            setOnClickListener { connectShizuku() }
+        val btnPermOverlay = createPillButton("1. Permiso 'Mostrar sobre otras apps'", isPrimary = false, d = d) {
+            val i = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName")
+            )
+            startActivity(i)
         }
 
-        btnStart = Button(this).apply {
-            text = "3. Iniciar Overlay Flotante"
-            textSize = 16f
-            setOnClickListener { toggleOverlay() }
+        val btnPermShizuku = createPillButton("2. Conectar Shizuku (Hardware Mouse)", isPrimary = false, d = d) {
+            connectShizuku()
         }
 
-        val btnOpenGfn = Button(this).apply {
-            text = "Abrir GeForce Now"
-            setOnClickListener {
-                val launch = packageManager.getLaunchIntentForPackage("com.nvidia.geforcenow")
-                if (launch != null) {
-                    startActivity(launch)
-                } else {
-                    tvStatus.append("\nNo se detectó GeForce Now instalado (igual podés abrirlo manual).")
-                }
+        btnStart = createPillButton("3. Iniciar Overlay Flotante", isPrimary = true, d = d) {
+            toggleOverlay()
+        }
+
+        val btnOpenGfn = createPillButton("Abrir GeForce Now", isPrimary = false, d = d) {
+            val launch = packageManager.getLaunchIntentForPackage("com.nvidia.geforcenow")
+            if (launch != null) {
+                startActivity(launch)
+            } else {
+                tvStatus.append("\nNo se detectó GeForce Now instalado (abrílo manual).")
             }
         }
 
         val hint = TextView(this).apply {
-            text = "\nCómo usar:\n" +
-                "• Tocá 'Iniciar Overlay Flotante' y abrí GeForce Now.\n" +
-                "• A la izquierda vas a ver una pestañita discreta (≡ HUD): tocala o deslizala hacia adentro para mover botones, ocultar los que no uses y ajustar el giroscopio RAW.\n" +
-                "• Si necesitás tocar menús del juego, usá 'Modo Cursor' dentro de esa pestaña."
-            textSize = 13f
-            setTextColor(Color.LTGRAY)
+            text = "\nLiquid Glass HUD:\n" +
+                "• El Joystick ahora es 100% limpio y analógico (sin WASD).\n" +
+                "• La caja del Trackpad en la derecha maneja la mira suave como mantequilla.\n" +
+                "• Abrí la píldora ≡ HUD en cualquier momento para ajustar la sensibilidad o invertir ejes del giroscopio."
+            textSize = 12.5f
+            setTextColor(Color.parseColor("#B0BEC5"))
             gravity = Gravity.START
         }
 
@@ -147,10 +145,45 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun createPillButton(text: String, isPrimary: Boolean, d: Float, onClick: () -> Unit): Button {
+        return Button(this).apply {
+            this.text = text
+            textSize = if (isPrimary) 15f else 13.5f
+            setTextColor(Color.WHITE)
+            setTypeface(null, if (isPrimary) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+            background = GradientDrawable().apply {
+                if (isPrimary) {
+                    colors = intArrayOf(
+                        Color.parseColor("#00E5FF"),
+                        Color.parseColor("#0091EA")
+                    )
+                    gradientType = GradientDrawable.LINEAR_GRADIENT
+                    orientation = GradientDrawable.Orientation.TOP_BOTTOM
+                } else {
+                    colors = intArrayOf(
+                        Color.argb(120, 45, 55, 75),
+                        Color.argb(180, 18, 22, 34)
+                    )
+                    gradientType = GradientDrawable.LINEAR_GRADIENT
+                    orientation = GradientDrawable.Orientation.TOP_BOTTOM
+                    setStroke((1.2f * d).toInt(), Color.argb(120, 200, 230, 255))
+                }
+                cornerRadius = 24 * d
+            }
+            setOnClickListener { onClick() }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                setMargins(0, 0, 0, (8 * d).toInt())
+            }
+        }
+    }
+
     private fun space(d: Float) = android.view.View(this).apply {
         layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
-            (12 * d).toInt()
+            (10 * d).toInt()
         )
     }
 
@@ -166,7 +199,7 @@ class MainActivity : AppCompatActivity() {
                 return
             }
             if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
-                VirtualHidController.bind(this)
+                VirtualHidController.connect(this)
             } else {
                 Shizuku.requestPermission(1001)
             }
@@ -212,13 +245,7 @@ class MainActivity : AppCompatActivity() {
             append("Permiso Overlay: ${if (overlayOk) "OK ✅" else "Falta ❌"}\n")
             append("Shizuku activo: ${if (shizukuAlive) "Sí ✅" else "No (abrí Shizuku) ❌"}\n")
             append("Permiso Shizuku: ${if (shizukuPerm) "OK ✅" else "Falta ❌"}\n")
-            append("Teclado/Mouse Virtual: ${VirtualHidController.lastStatus}")
-            val crash = getSharedPreferences("gfn_controls_prefs", MODE_PRIVATE)
-                .getString("last_crash", null)
-            if (!crash.isNullOrBlank()) {
-                append("\n\nÚltimo error:\n")
-                append(crash.take(700))
-            }
+            append("Driver de Entrada: ${VirtualHidController.lastStatus}")
         }
         btnStart.text = if (OverlayService.isRunning) {
             "Detener Overlay Flotante"
