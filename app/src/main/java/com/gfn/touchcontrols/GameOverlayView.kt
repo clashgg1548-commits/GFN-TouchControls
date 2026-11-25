@@ -75,6 +75,10 @@ class GameOverlayView(
         strokeJoin = Paint.Join.ROUND
     }
     private val iconFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textAlign = Paint.Align.CENTER
+        isFakeBoldText = true
+    }
     private val badgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.CENTER
         isFakeBoldText = true
@@ -149,17 +153,16 @@ class GameOverlayView(
     ) {
         val a255 = (alpha * 255).toInt().coerceIn(10, 255)
 
-        // 1. Disco base oscuro translúcido suave (sin bordes duros)
+        // Disco base oscuro translúcido suave (sin letras ni bordes toscos)
         padFillPaint.color = Color.argb((a255 * 0.38f).toInt(), 12, 14, 18)
         canvas.drawCircle(cx, cy, r, padFillPaint)
 
-        // Borde ultrafino y tenue
         padStrokePaint.color = Color.WHITE
         padStrokePaint.alpha = (a255 * 0.22f).toInt()
         padStrokePaint.strokeWidth = dp(1f)
         canvas.drawCircle(cx, cy, r, padStrokePaint)
 
-        // 2. Perilla central blanca minimalista (exacta a Battle Prime)
+        // Perilla blanca suave
         val maxDist = r * 0.62f
         val kx = cx + joyDx * maxDist
         val ky = cy + joyDy * maxDist
@@ -184,17 +187,14 @@ class GameOverlayView(
         val hBox = r * 1.08f
         tempRect.set(cx - wBox, cy - hBox, cx + wBox, cy + hBox)
 
-        // Fondo difuminado oscuro sin saturar
         padFillPaint.color = Color.argb((a255 * 0.22f).toInt(), 10, 12, 16)
         canvas.drawRoundRect(tempRect, dp(18f), dp(18f), padFillPaint)
 
-        // Borde muy sutil
         padStrokePaint.color = Color.WHITE
         padStrokePaint.alpha = (a255 * 0.18f).toInt()
         padStrokePaint.strokeWidth = dp(1f)
         canvas.drawRoundRect(tempRect, dp(18f), dp(18f), padStrokePaint)
 
-        // Pequeña cruz central de referencia táctil
         val cross = dp(12f)
         padStrokePaint.alpha = (a255 * 0.25f).toInt()
         canvas.drawLine(cx - cross, cy, cx + cross, cy, padStrokePaint)
@@ -213,7 +213,6 @@ class GameOverlayView(
         val isPressed = pressedButtons.contains(st.id) || (st.id == ControlId.AIM && aimToggled)
         val a255 = (alpha * 255).toInt().coerceIn(10, 255)
 
-        // 1. Disco suave translúcido
         padFillPaint.color = if (isPressed) {
             Color.argb((a255 * 0.75f).toInt(), 60, 68, 85)
         } else {
@@ -221,13 +220,11 @@ class GameOverlayView(
         }
         canvas.drawCircle(cx, cy, r, padFillPaint)
 
-        // 2. Borde sutil
         padStrokePaint.color = if (isPressed) Color.WHITE else Color.argb((a255 * 0.25f).toInt(), 255, 255, 255)
         padStrokePaint.alpha = if (isPressed) 240 else (a255 * 0.25f).toInt()
         padStrokePaint.strokeWidth = dp(1.2f)
         canvas.drawCircle(cx, cy, r, padStrokePaint)
 
-        // 3. Ícono blanco nítido
         iconPaint.color = Color.WHITE
         iconPaint.alpha = if (isPressed) 255 else (a255 * 0.90f).toInt()
         iconPaint.strokeWidth = dp(1.9f)
@@ -236,7 +233,6 @@ class GameOverlayView(
 
         drawVectorIcon(canvas, st, cx, cy, r * 0.50f)
 
-        // Etiqueta discreta de la tecla
         badgePaint.color = Color.WHITE
         badgePaint.alpha = if (isPressed) 230 else (a255 * 0.60f).toInt()
         badgePaint.textSize = (r * 0.28f).coerceAtLeast(dp(8.5f))
