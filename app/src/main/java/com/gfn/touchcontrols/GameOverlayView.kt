@@ -92,7 +92,16 @@ class GameOverlayView(
     }
 
     private fun radiusOf(st: ControlItemState): Float = dp(st.sizeDp) * 0.5f
-
+override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        if (w > 0 && h > 0) {
+            VirtualHidController.screenWidth = w.toFloat()
+            VirtualHidController.screenHeight = h.toFloat()
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                systemGestureExclusionRects = listOf(android.graphics.Rect(0, 0, w, h))
+            }
+        }
+}
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (width == 0 || height == 0) return
