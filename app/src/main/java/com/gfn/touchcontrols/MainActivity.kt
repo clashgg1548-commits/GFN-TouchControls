@@ -28,6 +28,12 @@ class MainActivity : AppCompatActivity() {
             VirtualHidController.bind(this)
         }
         refreshStatus()
+        val crash = getSharedPreferences("gfn_controls_prefs", MODE_PRIVATE)
+                .getString("last_crash", null)
+            if (!crash.isNullOrBlank()) {
+                append("\n\nÚltimo error:\n")
+                append(crash.take(700))
+            }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
