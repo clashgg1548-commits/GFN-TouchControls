@@ -576,27 +576,27 @@ class OverlayService : Service(), SensorEventListener {
             wm.defaultDisplay.rotation
         }
 
+        // Ejes corregidos para modo horizontal (Landscape nativo)
         val yawRate: Float
         val pitchRate: Float
         when (rot) {
             Surface.ROTATION_90 -> {
-                yawRate = -gy
-                pitchRate = -gx
+                yawRate = gx
+                pitchRate = gy
             }
             Surface.ROTATION_270 -> {
-                yawRate = gy
-                pitchRate = gx
+                yawRate = -gx
+                pitchRate = -gy
             }
             Surface.ROTATION_180 -> {
-                yawRate = -gx
-                pitchRate = gy
+                yawRate = -gy
+                pitchRate = gx
             }
             else -> {
                 yawRate = gy
                 pitchRate = -gx
             }
         }
-
         val dz = config.gyroDeadzone
         val cleanYaw = if (abs(yawRate) < dz) 0f else yawRate
         val cleanPitch = if (abs(pitchRate) < dz) 0f else pitchRate
