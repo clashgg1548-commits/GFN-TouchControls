@@ -248,16 +248,15 @@ object VirtualHidController {
     private fun injectMouse(buttons: Int, dx: Int, dy: Int) {
         val now = SystemClock.uptimeMillis()
 
-        mouseX = (mouseX + dx).coerceIn(100f, 2200f)
-        mouseY = (mouseY + dy).coerceIn(100f, 1000f)
-
         val props = arrayOf(MotionEvent.PointerProperties().apply {
             id = 0
             toolType = MotionEvent.TOOL_TYPE_MOUSE
         })
         val coords = arrayOf(MotionEvent.PointerCoords().apply {
-            x = mouseX
-            y = mouseY
+            x = dx.toFloat()
+            y = dy.toFloat()
+            setAxisValue(MotionEvent.AXIS_X, dx.toFloat())
+            setAxisValue(MotionEvent.AXIS_Y, dy.toFloat())
             setAxisValue(MotionEvent.AXIS_RELATIVE_X, dx.toFloat())
             setAxisValue(MotionEvent.AXIS_RELATIVE_Y, dy.toFloat())
         })
@@ -272,21 +271,13 @@ object VirtualHidController {
             )
             injectEvent(ev)
             ev.recycle()
-
-            val btnAction = if (isDown) MotionEvent.ACTION_BUTTON_PRESS else MotionEvent.ACTION_BUTTON_RELEASE
-            val evBtn = MotionEvent.obtain(
-                now, now, btnAction, 1, props, coords, 0, buttons,
-                1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE, 0
-            )
-            injectEvent(evBtn)
-            evBtn.recycle()
-
             lastMouseButtons = buttons
         }
+
         if (dx != 0 || dy != 0) {
             val ev = MotionEvent.obtain(
                 now, now, MotionEvent.ACTION_MOVE, 1, props, coords, 0, buttons,
-                1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE_RELATIVE, 0
+                1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE, 0
             )
             injectEvent(ev)
             ev.recycle()
