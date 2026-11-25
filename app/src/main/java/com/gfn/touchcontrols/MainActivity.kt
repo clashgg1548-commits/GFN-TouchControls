@@ -34,7 +34,6 @@ class MainActivity : AppCompatActivity() {
                 append("\n\nÚltimo error:\n")
                 append(crash.take(700))
             }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
