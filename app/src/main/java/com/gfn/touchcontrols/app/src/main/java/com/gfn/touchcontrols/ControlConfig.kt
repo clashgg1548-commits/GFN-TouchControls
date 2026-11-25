@@ -5,6 +5,7 @@ import org.json.JSONObject
 
 enum class IconStyle {
     JOYSTICK,
+    TRACKPAD,
     FIRE,
     AIM,
     JUMP,
@@ -24,6 +25,7 @@ enum class IconStyle {
 
 enum class ControlType {
     JOYSTICK_WASD,
+    TRACKPAD,
     MOUSE_BUTTON,
     KEY_HOLD,
     KEY_TAP
@@ -41,20 +43,21 @@ enum class ControlId(
     val defVisible: Boolean = true
 ) {
     JOYSTICK("Joystick WASD", "WASD", ControlType.JOYSTICK_WASD, 0, IconStyle.JOYSTICK, 0.16f, 0.70f, 138f, true),
+    TRACKPAD("Trackpad de Mira", "MIRA", ControlType.TRACKPAD, 0, IconStyle.TRACKPAD, 0.74f, 0.54f, 160f, true),
     SPRINT("Correr", "SHIFT", ControlType.KEY_HOLD, 0x02, IconStyle.SPRINT, 0.14f, 0.37f, 48f, true),
 
-    FIRE("Disparar", "LMB", ControlType.MOUSE_BUTTON, 0x01, IconStyle.FIRE, 0.84f, 0.70f, 80f, true),
+    FIRE("Disparar", "LMB", ControlType.MOUSE_BUTTON, 0x01, IconStyle.FIRE, 0.88f, 0.75f, 76f, true),
     FIRE_LEFT("Disparo Izq.", "LMB", ControlType.MOUSE_BUTTON, 0x01, IconStyle.FIRE, 0.12f, 0.23f, 64f, false),
-    AIM("Apuntar (ADS)", "RMB", ControlType.MOUSE_BUTTON, 0x02, IconStyle.AIM, 0.86f, 0.43f, 66f, true),
+    AIM("Apuntar (ADS)", "RMB", ControlType.MOUSE_BUTTON, 0x02, IconStyle.AIM, 0.90f, 0.40f, 64f, true),
 
-    JUMP("Saltar / Trepar", "ESP", ControlType.KEY_HOLD, 0x2C, IconStyle.JUMP, 0.94f, 0.56f, 54f, true),
-    CROUCH("Agacharse", "C", ControlType.KEY_TAP, 0x06, IconStyle.CROUCH, 0.75f, 0.85f, 52f, true),
-    PRONE("Acostarse", "Z", ControlType.KEY_TAP, 0x1D, IconStyle.PRONE, 0.66f, 0.86f, 50f, true),
-    RELOAD("Recargar", "R", ControlType.KEY_TAP, 0x15, IconStyle.RELOAD, 0.74f, 0.62f, 52f, true),
-    GRENADE("Granada", "G", ControlType.KEY_TAP, 0x0A, IconStyle.GRENADE, 0.65f, 0.71f, 50f, true),
-    MELEE("Cuchillo", "F", ControlType.KEY_TAP, 0x09, IconStyle.MELEE, 0.93f, 0.77f, 48f, true),
-    INTERACT("Interactuar / Vehículo", "E", ControlType.KEY_TAP, 0x08, IconStyle.INTERACT, 0.72f, 0.42f, 50f, true),
-    PING("Marcar enemigo", "Q", ControlType.KEY_TAP, 0x14, IconStyle.PING, 0.79f, 0.25f, 46f, true),
+    JUMP("Saltar / Trepar", "ESP", ControlType.KEY_HOLD, 0x2C, IconStyle.JUMP, 0.94f, 0.58f, 52f, true),
+    CROUCH("Agacharse", "C", ControlType.KEY_TAP, 0x06, IconStyle.CROUCH, 0.78f, 0.86f, 50f, true),
+    PRONE("Acostarse", "Z", ControlType.KEY_TAP, 0x1D, IconStyle.PRONE, 0.69f, 0.87f, 48f, true),
+    RELOAD("Recargar", "R", ControlType.KEY_TAP, 0x15, IconStyle.RELOAD, 0.84f, 0.24f, 50f, true),
+    GRENADE("Granada", "G", ControlType.KEY_TAP, 0x0A, IconStyle.GRENADE, 0.75f, 0.24f, 48f, true),
+    MELEE("Cuchillo", "F", ControlType.KEY_TAP, 0x09, IconStyle.MELEE, 0.94f, 0.78f, 48f, true),
+    INTERACT("Interactuar / Vehículo", "E", ControlType.KEY_TAP, 0x08, IconStyle.INTERACT, 0.66f, 0.25f, 48f, true),
+    PING("Marcar enemigo", "Q", ControlType.KEY_TAP, 0x14, IconStyle.PING, 0.58f, 0.25f, 46f, true),
 
     SLOT_1("Arma 1", "1", ControlType.KEY_TAP, 0x1E, IconStyle.SLOT, 0.37f, 0.88f, 46f, true),
     SLOT_2("Arma 2", "2", ControlType.KEY_TAP, 0x1F, IconStyle.SLOT, 0.44f, 0.88f, 46f, true),
@@ -126,7 +129,7 @@ class ControlConfig(context: Context) {
                 items[id]?.apply {
                     xFrac = obj.optDouble("x", id.defX.toDouble()).toFloat().coerceIn(0.03f, 0.97f)
                     yFrac = obj.optDouble("y", id.defY.toDouble()).toFloat().coerceIn(0.05f, 0.95f)
-                    sizeDp = obj.optDouble("s", id.defSizeDp.toDouble()).toFloat().coerceIn(30f, 200f)
+                    sizeDp = obj.optDouble("s", id.defSizeDp.toDouble()).toFloat().coerceIn(30f, 260f)
                     visible = obj.optBoolean("v", id.defVisible)
                 }
             }
