@@ -68,7 +68,6 @@ class GameOverlayView(
 
     private val density = resources.displayMetrics.density
 
-    // Pinturas para el renderizado Liquid Glass
     private val glassFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val glassStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val specularPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
@@ -147,7 +146,6 @@ class GameOverlayView(
         }
     }
 
-    // --- JOYSTICK LIMPIO LIQUID GLASS (SIN LETRAS WASD) ---
     private fun drawLiquidJoystick(
         canvas: Canvas,
         cx: Float,
@@ -158,7 +156,6 @@ class GameOverlayView(
     ) {
         val a255 = (alpha * 255).toInt().coerceIn(15, 255)
 
-        // Aro exterior de cristal
         val baseGradient = RadialGradient(
             cx, cy, r,
             intArrayOf(
@@ -172,14 +169,12 @@ class GameOverlayView(
         glassFillPaint.shader = baseGradient
         canvas.drawCircle(cx, cy, r, glassFillPaint)
 
-        // Borde fino de cristal con brillo especular
         glassStrokePaint.shader = null
         glassStrokePaint.color = if (joySprinting) Color.parseColor("#E0AAFF") else Color.WHITE
         glassStrokePaint.alpha = if (joySprinting) 240 else (a255 * 0.65f).toInt()
         glassStrokePaint.strokeWidth = dp(1.8f)
         canvas.drawCircle(cx, cy, r, glassStrokePaint)
 
-        // Perilla central estilo orbe de cristal líquido
         val maxDist = r * 0.62f
         val kx = cx + joyDx * maxDist
         val ky = cy + joyDy * maxDist
@@ -198,20 +193,17 @@ class GameOverlayView(
         glassFillPaint.shader = knobGradient
         canvas.drawCircle(kx, ky, kr, glassFillPaint)
 
-        // Reflejo curvo superior (brillo 3D)
         highlightRect.set(kx - kr * 0.65f, ky - kr * 0.75f, kx + kr * 0.65f, ky - kr * 0.1f)
         specularPaint.color = Color.WHITE
         specularPaint.alpha = (a255 * 0.65f).toInt()
         canvas.drawOval(highlightRect, specularPaint)
 
-        // Borde brillante de la perilla
         glassStrokePaint.color = Color.WHITE
         glassStrokePaint.alpha = (a255 * 0.90f).toInt()
         glassStrokePaint.strokeWidth = dp(1.6f)
         canvas.drawCircle(kx, ky, kr, glassStrokePaint)
     }
 
-    // --- TRACKPAD DE MIRA LIQUID GLASS ---
     private fun drawLiquidTrackpad(
         canvas: Canvas,
         cx: Float,
@@ -248,11 +240,12 @@ class GameOverlayView(
         specularPaint.alpha = (a255 * 0.28f).toInt()
         canvas.drawRoundRect(highlightRect, dp(8f), dp(8f), specularPaint)
 
+        val cross = dp(16f)
         glassStrokePaint.color = Color.WHITE
         glassStrokePaint.alpha = (a255 * 0.35f).toInt()
         glassStrokePaint.strokeWidth = dp(1.2f)
-        canvas.drawLine(cx - dp(16f), cy, cx + dp(16f), cy, glassStrokePaint)
-        canvas.drawLine(cx, cy - dp(16f), cx, cy + dp(16f), cy, glassStrokePaint)
+        canvas.drawLine(cx - cross, cy, cx + cross, cy, glassStrokePaint)
+        canvas.drawLine(cx, cy - cross, cx, cy + cross, glassStrokePaint)
 
         textPaint.color = Color.WHITE
         textPaint.alpha = (a255 * 0.65f).toInt()
@@ -260,7 +253,6 @@ class GameOverlayView(
         canvas.drawText("TRACKPAD MIRA", cx, cy + hBox - dp(10f), textPaint)
     }
 
-    // --- BOTONES DE ACCIÓN LIQUID GLASS ---
     private fun drawLiquidActionButton(
         canvas: Canvas,
         cx: Float,
@@ -304,13 +296,11 @@ class GameOverlayView(
         glassFillPaint.shader = buttonGradient
         canvas.drawCircle(cx, cy, r, glassFillPaint)
 
-        // Reflejo especular superior
         highlightRect.set(cx - r * 0.65f, cy - r * 0.85f, cx + r * 0.65f, cy - r * 0.15f)
         specularPaint.color = Color.WHITE
         specularPaint.alpha = if (isPressed) 180 else (a255 * 0.40f).toInt()
         canvas.drawOval(highlightRect, specularPaint)
 
-        // Borde perimetral de cristal
         glassStrokePaint.shader = null
         glassStrokePaint.color = when {
             isPressed -> Color.WHITE
@@ -322,7 +312,6 @@ class GameOverlayView(
         glassStrokePaint.strokeWidth = dp(1.8f)
         canvas.drawCircle(cx, cy, r, glassStrokePaint)
 
-        // Ícono vectorial
         iconPaint.color = if (isPressed) Color.BLACK else Color.WHITE
         iconPaint.alpha = if (isPressed) 240 else a255
         iconPaint.strokeWidth = dp(2f)
@@ -331,7 +320,6 @@ class GameOverlayView(
 
         drawVectorIcon(canvas, st, cx, cy, r * 0.48f)
 
-        // Etiqueta tecla
         badgePaint.color = if (isPressed) Color.BLACK else Color.WHITE
         badgePaint.alpha = if (isPressed) 240 else (a255 * 0.85f).toInt()
         badgePaint.textSize = (r * 0.28f).coerceAtLeast(dp(8.5f))
@@ -354,11 +342,13 @@ class GameOverlayView(
                 canvas.drawLine(cx - s * 0.35f, oy + s * 0.25f, cx + s * 0.35f, oy + s * 0.25f, iconPaint)
             }
             IconStyle.AIM -> {
+                val r1 = s * 0.32f
+                val r2 = s * 0.88f
                 canvas.drawCircle(cx, oy, s * 0.62f, iconPaint)
-                canvas.drawLine(cx - s * 0.88f, oy, cx - s * 0.32f, oy, iconPaint)
-                canvas.drawLine(cx + s * 0.32f, oy, cx + s * 0.88f, oy, iconPaint)
-                canvas.drawLine(cx, oy - s * 0.88f, cx, oy - s * 0.32f, iconPaint)
-                canvas.drawLine(cx, oy + s * 0.32f, cx, oy + s * 0.88f, iconPaint)
+                canvas.drawLine(cx - r2, oy, cx - r1, oy, iconPaint)
+                canvas.drawLine(cx + r1, oy, cx + r2, oy, iconPaint)
+                canvas.drawLine(cx, oy - r2, cx, oy - r1, iconPaint)
+                canvas.drawLine(cx, oy + r1, cx, oy + r2, iconPaint)
                 canvas.drawCircle(cx, oy, dp(2f), iconFillPaint)
             }
             IconStyle.JUMP -> {
