@@ -36,6 +36,9 @@ object VirtualHidController {
     var lastStatus: String = "Sin conectar"
         private set
 
+    var screenWidth = 2400f
+    var screenHeight = 1080f
+
     private val heldBySource = LinkedHashMap<String, Pair<Int, Set<Int>>>()
     private val mouseSources = LinkedHashMap<String, Int>()
     private var currentMouseButtons = 0
@@ -53,6 +56,13 @@ object VirtualHidController {
 
     fun unbind(context: Context) {
         releaseAll()
+        try {
+            uinputWriter?.close()
+            uinputProcess?.destroy()
+        } catch (_: Throwable) {
+        }
+        uinputWriter = null
+        uinputProcess = null
     }
 
     fun connect(context: Context): Boolean {
@@ -98,7 +108,23 @@ object VirtualHidController {
     private fun initHardwareMouse() {
         try {
             uinputProcess?.destroy()
-            val proc = Shizuku.newProcess(arrayOf("/system/bin/uinput", "-"), null, null)
+
+            // Llamada segura a newProcess de Shizuku por reflexión
+            val clazz = Class.forName("rikka.shizuku.Shizuku")
+            val method = clazz.getDeclaredMethod(
+                "newProcess",
+                Array<String>::class.java,
+                Array<String>::class.java,
+                String::class.java
+            )
+            method.isAccessible = true
+            val proc = method.invoke(
+                null,
+                arrayOf("/system/bin/uinput", "-"),
+                null,
+                null
+            ) as Process
+
             val writer = BufferedWriter(OutputStreamWriter(proc.outputStream))
 
             // Registra un ratón USB real con clics (izquierdo, derecho, medio) y movimiento relativo X/Y
@@ -259,11 +285,9 @@ object VirtualHidController {
         injectEvent(ke)
     }
 
-    // Inyección de eventos físicos directos al kernel (uinput)
     private fun injectHardwareMouse(buttons: Int, dx: Int, dy: Int) {
         val writer = uinputWriter
         if (writer == null) {
-            // Intento de reinicializar si se desconectó
             initHardwareMouse()
             return
         }
