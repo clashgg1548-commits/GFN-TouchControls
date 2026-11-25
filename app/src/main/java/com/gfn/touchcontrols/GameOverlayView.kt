@@ -4,9 +4,11 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
+import android.os.Build
 import android.view.MotionEvent
 import android.view.View
 import kotlin.math.atan2
@@ -50,14 +52,13 @@ class GameOverlayView(
     private val pressedButtons = HashSet<ControlId>()
 
     private sealed class PointerRole {
-        data object AimPad : PointerRole()
+        data class Trackpad(var lastX: Float, var lastY: Float) : PointerRole()
         data class Joystick(val startX: Float, val startY: Float) : PointerRole()
         data class Button(val id: ControlId) : PointerRole()
         data class EditDrag(val id: ControlId, val offsetX: Float, val offsetY: Float) : PointerRole()
     }
 
     private val activePointers = HashMap<Int, PointerRole>()
-    private val lastAimPos = HashMap<Int, Pair<Float, Float>>()
 
     private var joyDx = 0f
     private var joyDy = 0f
@@ -92,16 +93,18 @@ class GameOverlayView(
     }
 
     private fun radiusOf(st: ControlItemState): Float = dp(st.sizeDp) * 0.5f
-override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         if (w > 0 && h > 0) {
             VirtualHidController.screenWidth = w.toFloat()
             VirtualHidController.screenHeight = h.toFloat()
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 systemGestureExclusionRects = listOf(android.graphics.Rect(0, 0, w, h))
             }
         }
-}
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (width == 0 || height == 0) return
@@ -116,19 +119,60 @@ override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
             val r = radiusOf(st)
             val itemAlpha = if (!st.visible && editMode) 0.25f else baseAlpha
 
-            if (id == ControlId.JOYSTICK) {
-                drawJoystick(canvas, cx, cy, r, itemAlpha, st)
-            } else {
-                drawActionButton(canvas, cx, cy, r, itemAlpha, st)
+            when (id) {
+                ControlId.JOYSTICK -> drawJoystick(canvas, cx, cy, r, itemAlpha, st)
+                ControlId.TRACKPAD -> drawTrackpad(canvas, cx, cy, r, itemAlpha, st)
+                else -> drawActionButton(canvas, cx, cy, r, itemAlpha, st)
             }
 
             if (editMode && id == selectedEditId) {
                 strokePaint.color = Color.parseColor("#00E5FF")
                 strokePaint.strokeWidth = dp(2.5f)
                 strokePaint.alpha = 240
-                canvas.drawCircle(cx, cy, r + dp(4f), strokePaint)
+                if (id == ControlId.TRACKPAD) {
+                    val wBox = r * 1.5f
+                    val hBox = r * 1.1f
+                    tempRect.set(cx - wBox, cy - hBox, cx + wBox, cy + hBox)
+                    canvas.drawRoundRect(tempRect, dp(18f), dp(18f), strokePaint)
+                } else {
+                    canvas.drawCircle(cx, cy, r + dp(4f), strokePaint)
+                }
             }
         }
+    }
+
+    private fun drawTrackpad(
+        canvas: Canvas,
+        cx: Float,
+        cy: Float,
+        r: Float,
+        alpha: Float,
+        st: ControlItemState
+    ) {
+        val a255 = (alpha * 255).toInt().coerceIn(20, 255)
+        val wBox = r * 1.45f
+        val hBox = r * 1.05f
+        tempRect.set(cx - wBox, cy - hBox, cx + wBox, cy + hBox)
+
+        fillPaint.color = Color.argb((a255 * 0.40f).toInt(), 16, 20, 30)
+        canvas.drawRoundRect(tempRect, dp(18f), dp(18f), fillPaint)
+
+        strokePaint.color = Color.parseColor("#40C4FF")
+        strokePaint.alpha = (a255 * 0.85f).toInt()
+        strokePaint.strokeWidth = dp(1.8f)
+        canvas.drawRoundRect(tempRect, dp(18f), dp(18f), strokePaint)
+
+        // Retícula central tenue
+        strokePaint.color = Color.WHITE
+        strokePaint.alpha = (a255 * 0.35f).toInt()
+        strokePaint.strokeWidth = dp(1.2f)
+        canvas.drawLine(cx - dp(18f), cy, cx + dp(18f), cy, strokePaint)
+        canvas.drawLine(cx, cy - dp(18f), cx, cy + dp(18f), strokePaint)
+
+        textPaint.color = Color.WHITE
+        textPaint.alpha = (a255 * 0.70f).toInt()
+        textPaint.textSize = dp(11f)
+        canvas.drawText("TRACKPAD MIRA", cx, cy + hBox - dp(10f), textPaint)
     }
 
     private fun drawJoystick(
@@ -148,7 +192,6 @@ override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         strokePaint.strokeWidth = dp(2f)
         canvas.drawCircle(cx, cy, r, strokePaint)
 
-        // Guías direccionales discretas
         textPaint.color = Color.WHITE
         textPaint.alpha = (a255 * 0.65f).toInt()
         textPaint.textSize = r * 0.22f
@@ -157,7 +200,6 @@ override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         canvas.drawText("A", cx - r * 0.72f, cy + textPaint.textSize * 0.35f, textPaint)
         canvas.drawText("D", cx + r * 0.72f, cy + textPaint.textSize * 0.35f, textPaint)
 
-        // Knob interno
         val maxDist = r * 0.62f
         val kx = cx + joyDx * maxDist
         val ky = cy + joyDy * maxDist
@@ -165,12 +207,6 @@ override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         fillPaint.color = if (joySprinting) Color.parseColor("#FFB300") else Color.WHITE
         fillPaint.alpha = (a255 * 0.85f).toInt()
         canvas.drawCircle(kx, ky, kr, fillPaint)
-
-        if (editMode && !st.visible) {
-            badgePaint.color = Color.RED
-            badgePaint.textSize = dp(10f)
-            canvas.drawText("OCULTO", cx, cy, badgePaint)
-        }
     }
 
     private fun drawActionButton(
@@ -211,7 +247,6 @@ override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
 
         drawVectorIcon(canvas, st, cx, cy, r * 0.48f)
 
-        // Etiqueta pequeña abajo (tecla o número)
         badgePaint.color = if (isPressed) Color.BLACK else Color.WHITE
         badgePaint.alpha = (a255 * 0.85f).toInt()
         badgePaint.textSize = (r * 0.28f).coerceAtLeast(dp(8.5f))
@@ -224,7 +259,6 @@ override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         val oy = cy - s * 0.14f
         when (st.id.icon) {
             IconStyle.FIRE -> {
-                // Bala estilizada
                 tempPath.reset()
                 tempPath.moveTo(cx - s * 0.35f, oy + s * 0.55f)
                 tempPath.lineTo(cx - s * 0.35f, oy - s * 0.05f)
@@ -235,7 +269,6 @@ override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
                 canvas.drawLine(cx - s * 0.35f, oy + s * 0.25f, cx + s * 0.35f, oy + s * 0.25f, iconPaint)
             }
             IconStyle.AIM -> {
-                // Retícula de mira
                 canvas.drawCircle(cx, oy, s * 0.62f, iconPaint)
                 canvas.drawLine(cx - s * 0.88f, oy, cx - s * 0.32f, oy, iconPaint)
                 canvas.drawLine(cx + s * 0.32f, oy, cx + s * 0.88f, oy, iconPaint)
@@ -244,7 +277,6 @@ override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
                 canvas.drawCircle(cx, oy, dp(2f), iconFillPaint)
             }
             IconStyle.JUMP -> {
-                // Flecha salto hacia arriba
                 tempPath.reset()
                 tempPath.moveTo(cx, oy - s * 0.65f)
                 tempPath.lineTo(cx - s * 0.55f, oy + s * 0.05f)
@@ -256,7 +288,6 @@ override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
                 canvas.drawLine(cx - s * 0.5f, oy + s * 0.62f, cx + s * 0.5f, oy + s * 0.62f, iconPaint)
             }
             IconStyle.CROUCH -> {
-                // Silueta agachado
                 canvas.drawCircle(cx + s * 0.12f, oy - s * 0.45f, s * 0.22f, iconPaint)
                 tempPath.reset()
                 tempPath.moveTo(cx + s * 0.08f, oy - s * 0.20f)
@@ -266,20 +297,17 @@ override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
                 canvas.drawPath(tempPath, iconPaint)
             }
             IconStyle.PRONE -> {
-                // Silueta acostado
                 canvas.drawCircle(cx + s * 0.52f, oy + s * 0.15f, s * 0.20f, iconPaint)
                 canvas.drawLine(cx - s * 0.68f, oy + s * 0.35f, cx + s * 0.28f, oy + s * 0.28f, iconPaint)
                 canvas.drawLine(cx - s * 0.68f, oy + s * 0.55f, cx + s * 0.68f, oy + s * 0.55f, iconPaint)
             }
             IconStyle.RELOAD -> {
-                // Flecha circular recarga
                 tempRect.set(cx - s * 0.55f, oy - s * 0.55f, cx + s * 0.55f, oy + s * 0.55f)
                 canvas.drawArc(tempRect, -40f, 280f, false, iconPaint)
                 canvas.drawLine(cx + s * 0.32f, oy - s * 0.55f, cx + s * 0.60f, oy - s * 0.28f, iconPaint)
                 canvas.drawLine(cx + s * 0.60f, oy - s * 0.28f, cx + s * 0.25f, oy - s * 0.15f, iconPaint)
             }
             IconStyle.GRENADE -> {
-                // Granada clásica
                 tempRect.set(cx - s * 0.42f, oy - s * 0.28f, cx + s * 0.42f, oy + s * 0.58f)
                 canvas.drawOval(tempRect, iconPaint)
                 canvas.drawLine(cx - s * 0.40f, oy + s * 0.15f, cx + s * 0.40f, oy + s * 0.15f, iconPaint)
@@ -289,7 +317,6 @@ override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
                 canvas.drawCircle(cx - s * 0.42f, oy - s * 0.42f, s * 0.16f, iconPaint)
             }
             IconStyle.SPRINT -> {
-                // Doble chevrón correr
                 tempPath.reset()
                 tempPath.moveTo(cx - s * 0.45f, oy + s * 0.20f)
                 tempPath.lineTo(cx, oy - s * 0.25f)
@@ -300,18 +327,15 @@ override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
                 canvas.drawPath(tempPath, iconPaint)
             }
             IconStyle.MELEE -> {
-                // Cuchillo diagonal
                 canvas.drawLine(cx - s * 0.48f, oy + s * 0.48f, cx + s * 0.52f, oy - s * 0.52f, iconPaint)
                 canvas.drawLine(cx - s * 0.38f, oy + s * 0.08f, cx - s * 0.08f, oy + s * 0.38f, iconPaint)
             }
             IconStyle.INTERACT -> {
-                // Caja / Interactuar
                 tempRect.set(cx - s * 0.48f, oy - s * 0.45f, cx + s * 0.48f, oy + s * 0.45f)
                 canvas.drawRoundRect(tempRect, dp(4f), dp(4f), iconPaint)
                 canvas.drawCircle(cx, oy, s * 0.16f, iconFillPaint)
             }
             IconStyle.PING -> {
-                // Pin / Spot enemigo
                 tempPath.reset()
                 tempPath.moveTo(cx, oy + s * 0.62f)
                 tempPath.lineTo(cx - s * 0.44f, oy - s * 0.05f)
@@ -332,7 +356,7 @@ override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
                 textPaint.textSize = s * 0.72f
                 canvas.drawText(st.id.badge, cx, oy + textPaint.textSize * 0.4f, textPaint)
             }
-            IconStyle.JOYSTICK -> {}
+            IconStyle.JOYSTICK, IconStyle.TRACKPAD -> {}
         }
     }
 
@@ -369,8 +393,17 @@ override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
             if (!st.visible && !includeHiddenInEdit) continue
             val (cx, cy) = centerOf(st)
             val r = radiusOf(st)
-            if (hypot(x - cx, y - cy) <= r * 1.12f) {
-                return st
+
+            if (id == ControlId.TRACKPAD) {
+                val wBox = r * 1.45f
+                val hBox = r * 1.05f
+                if (x >= cx - wBox && x <= cx + wBox && y >= cy - hBox && y <= cy + hBox) {
+                    return st
+                }
+            } else {
+                if (hypot(x - cx, y - cy) <= r * 1.12f) {
+                    return st
+                }
             }
         }
         return null
@@ -391,17 +424,20 @@ override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
 
         val hit = hitTestControl(x, y, false)
         if (hit != null) {
-            if (hit.id == ControlId.JOYSTICK) {
-                val (cx, cy) = centerOf(hit)
-                activePointers[pid] = PointerRole.Joystick(cx, cy)
-                updateJoystick(x - cx, y - cy, radiusOf(hit))
-            } else {
-                activePointers[pid] = PointerRole.Button(hit.id)
-                onButtonDown(hit.id)
+            when (hit.id) {
+                ControlId.JOYSTICK -> {
+                    val (cx, cy) = centerOf(hit)
+                    activePointers[pid] = PointerRole.Joystick(cx, cy)
+                    updateJoystick(x - cx, y - cy, radiusOf(hit))
+                }
+                ControlId.TRACKPAD -> {
+                    activePointers[pid] = PointerRole.Trackpad(x, y)
+                }
+                else -> {
+                    activePointers[pid] = PointerRole.Button(hit.id)
+                    onButtonDown(hit.id)
+                }
             }
-        } else {
-            activePointers[pid] = PointerRole.AimPad
-            lastAimPos[pid] = x to y
         }
         invalidate()
     }
@@ -422,14 +458,12 @@ override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
                 updateJoystick(x - cx, y - cy, radiusOf(st))
                 invalidate()
             }
-            is PointerRole.AimPad -> {
-                val prev = lastAimPos[pid]
-                if (prev != null) {
-                    val dx = (x - prev.first) * config.touchSensX
-                    val dy = (y - prev.second) * config.touchSensY
-                    VirtualHidController.addMouseDelta(dx, dy)
-                }
-                lastAimPos[pid] = x to y
+            is PointerRole.Trackpad -> {
+                val dx = (x - role.lastX) * config.touchSensX
+                val dy = (y - role.lastY) * config.touchSensY
+                role.lastX = x
+                role.lastY = y
+                VirtualHidController.addMouseDelta(dx, dy)
             }
             is PointerRole.Button, null -> Unit
         }
@@ -452,13 +486,11 @@ override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
                 onButtonUp(role.id)
                 invalidate()
             }
-            is PointerRole.AimPad -> {
-                lastAimPos.remove(pid)
-            }
-            null -> Unit
+            is PointerRole.Trackpad, null -> Unit
         }
     }
-private fun updateJoystick(rawDx: Float, rawDy: Float, radius: Float) {
+
+    private fun updateJoystick(rawDx: Float, rawDy: Float, radius: Float) {
         val maxDist = (radius * 0.62f).coerceAtLeast(10f)
         val dist = hypot(rawDx, rawDy)
         val clamped = min(dist, maxDist)
@@ -498,7 +530,7 @@ private fun updateJoystick(rawDx: Float, rawDy: Float, radius: Float) {
                 }
             }
             ControlType.KEY_TAP -> VirtualHidController.tapKey(id.code)
-            ControlType.JOYSTICK_WASD -> Unit
+            ControlType.JOYSTICK_WASD, ControlType.TRACKPAD -> Unit
         }
         updateAdsFlag()
     }
@@ -511,7 +543,7 @@ private fun updateJoystick(rawDx: Float, rawDy: Float, radius: Float) {
         when (id.type) {
             ControlType.MOUSE_BUTTON -> VirtualHidController.setMouseButton(id.name, id.code, false)
             ControlType.KEY_HOLD -> VirtualHidController.setKeys(id.name, 0, emptySet())
-            ControlType.KEY_TAP, ControlType.JOYSTICK_WASD -> Unit
+            ControlType.KEY_TAP, ControlType.JOYSTICK_WASD, ControlType.TRACKPAD -> Unit
         }
         updateAdsFlag()
     }
