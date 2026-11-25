@@ -65,17 +65,27 @@ class OverlayService : Service(), SensorEventListener {
     override fun onCreate() {
         super.onCreate()
         isRunning = true
-        wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        config = ControlConfig(this)
-        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+        try {
+            wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            config = ControlConfig(this)
+            sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+            gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
 
-        startForegroundNotif()
-        VirtualHidController.bind(this)
+            startForegroundNotif()
+            VirtualHidController.bind(this)
 
-        createHudOverlay()
-        createFloatingTab()
-        registerGyro()
+            createHudOverlay()
+            createFloatingTab()
+            registerGyro()
+        } catch (t: Throwable) {
+            isRunning = false
+            val msg = android.util.Log.getStackTraceString(t)
+            getSharedPreferences("gfn_controls_prefs", Context.MODE_PRIVATE)
+                .edit()
+                .putString("last_crash", msg)
+                .apply()
+            stopSelf()
+        }
     }
 
     private fun startForegroundNotif() {
@@ -101,9 +111,13 @@ class OverlayService : Service(), SensorEventListener {
             .setOngoing(true)
             .build()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-        } else {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            } else {
+                startForeground(NOTIF_ID, notif)
+            }
+        } catch (_: Throwable) {
             startForeground(NOTIF_ID, notif)
         }
     }
