@@ -4,10 +4,12 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.DashPathEffect
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.RadialGradient
 import android.graphics.RectF
+import android.graphics.Shader
 import android.os.Build
 import android.view.MotionEvent
 import android.view.View
@@ -120,12 +122,13 @@ class GameOverlayView(
             val itemAlpha = if (!st.visible && editMode) 0.25f else baseAlpha
 
             when (id) {
-                ControlId.JOYSTICK -> drawJoystick(canvas, cx, cy, r, itemAlpha, st)
-                ControlId.TRACKPAD -> drawTrackpad(canvas, cx, cy, r, itemAlpha, st)
-                else -> drawActionButton(canvas, cx, cy, r, itemAlpha, st)
+                ControlId.JOYSTICK -> drawLiquidJoystick(canvas, cx, cy, r, itemAlpha)
+                ControlId.TRACKPAD -> drawLiquidTrackpad(canvas, cx, cy, r, itemAlpha)
+                else -> drawLiquidActionButton(canvas, cx, cy, r, itemAlpha, st)
             }
 
             if (editMode && id == selectedEditId) {
+                strokePaint.shader = null
                 strokePaint.color = Color.parseColor("#00E5FF")
                 strokePaint.strokeWidth = dp(2.5f)
                 strokePaint.alpha = 240
@@ -133,83 +136,153 @@ class GameOverlayView(
                     val wBox = r * 1.5f
                     val hBox = r * 1.1f
                     tempRect.set(cx - wBox, cy - hBox, cx + wBox, cy + hBox)
-                    canvas.drawRoundRect(tempRect, dp(18f), dp(18f), strokePaint)
+                    canvas.drawRoundRect(tempRect, dp(22f), dp(22f), strokePaint)
                 } else {
-                    canvas.drawCircle(cx, cy, r + dp(4f), strokePaint)
+                    canvas.drawCircle(cx, cy, r + dp(5f), strokePaint)
                 }
             }
         }
     }
 
-    private fun drawTrackpad(
+    // --- JOYSTICK 100% LIMPIO ESTILO LIQUID GLASS (SIN WASD) ---
+    private fun drawLiquidJoystick(
         canvas: Canvas,
         cx: Float,
         cy: Float,
         r: Float,
-        alpha: Float,
-        st: ControlItemState
+        alpha: Float
+    ) {
+        val a255 = (alpha * 255).toInt().coerceIn(20, 255)
+
+        // 1. Base exterior cóncava de cristal ahumado
+        fillPaint.shader = RadialGradient(
+            cx, cy, r,
+            intArrayOf(
+                Color.argb((a255 * 0.15f).toInt(), 255, 255, 255),
+                Color.argb((a255 * 0.38f).toInt(), 12, 16, 26),
+                Color.argb((a255 * 0.60f).toInt(), 6, 8, 14)
+            ),
+            floatArrayOf(0.0f, 0.70f, 1.0f),
+            Shader.TileMode.CLAMP
+        )
+        canvas.drawCircle(cx, cy, r, fillPaint)
+
+        // 2. Anillo de cristal exterior con reflejo superior ("Rim Light")
+        strokePaint.shader = LinearGradient(
+            cx, cy - r, cx, cy + r,
+            intArrayOf(
+                Color.argb((a255 * 0.75f).toInt(), 255, 255, 255),
+                Color.argb((a255 * 0.20f).toInt(), 180, 210, 255),
+                Color.argb((a255 * 0.10f).toInt(), 255, 255, 255)
+            ),
+            floatArrayOf(0.0f, 0.5f, 1.0f),
+            Shader.TileMode.CLAMP
+        )
+        strokePaint.strokeWidth = dp(1.8f)
+        canvas.drawCircle(cx, cy, r, strokePaint)
+
+        // 3. Anillo concéntrico interno minimalista (guía sutil)
+        strokePaint.shader = null
+        strokePaint.color = if (joySprinting) Color.parseColor("#FFD54F") else Color.WHITE
+        strokePaint.alpha = (a255 * 0.20f).toInt()
+        strokePaint.strokeWidth = dp(1f)
+        canvas.drawCircle(cx, cy, r * 0.60f, strokePaint)
+
+        // 4. Perilla (Knob) de cristal 3D con luz especular
+        val maxDist = r * 0.62f
+        val kx = cx + joyDx * maxDist
+        val ky = cy + joyDy * maxDist
+        val kr = r * 0.38f
+
+        // Sombra de cristal de la perilla
+        fillPaint.shader = null
+        fillPaint.color = Color.argb((a255 * 0.45f).toInt(), 0, 0, 0)
+        canvas.drawCircle(kx, ky + dp(3f), kr, fillPaint)
+
+        // Vidrio con luz radial arriba a la izquierda
+        fillPaint.shader = RadialGradient(
+            kx - kr * 0.35f, ky - kr * 0.35f, kr * 1.3f,
+            intArrayOf(
+                if (joySprinting) Color.argb(a255, 255, 238, 150) else Color.argb((a255 * 0.95f).toInt(), 245, 250, 255),
+                if (joySprinting) Color.argb(a255, 255, 179, 0) else Color.argb((a255 * 0.65f).toInt(), 120, 160, 210),
+                Color.argb((a255 * 0.85f).toInt(), 18, 26, 42)
+            ),
+            floatArrayOf(0.0f, 0.45f, 1.0f),
+            Shader.TileMode.CLAMP
+        )
+        canvas.drawCircle(kx, ky, kr, fillPaint)
+
+        // Borde fino de cristal en la perilla
+        strokePaint.shader = LinearGradient(
+            kx, ky - kr, kx, ky + kr,
+            intArrayOf(
+                Color.argb(a255, 255, 255, 255),
+                Color.argb((a255 * 0.3f).toInt(), 255, 255, 255)
+            ),
+            null,
+            Shader.TileMode.CLAMP
+        )
+        strokePaint.strokeWidth = dp(1.5f)
+        canvas.drawCircle(kx, ky, kr, strokePaint)
+    }
+
+    // --- TRACKPAD ESTILO LOSA DE CRISTAL ESMERILADO (FROSTED GLASS) ---
+    private fun drawLiquidTrackpad(
+        canvas: Canvas,
+        cx: Float,
+        cy: Float,
+        r: Float,
+        alpha: Float
     ) {
         val a255 = (alpha * 255).toInt().coerceIn(20, 255)
         val wBox = r * 1.45f
         val hBox = r * 1.05f
         tempRect.set(cx - wBox, cy - hBox, cx + wBox, cy + hBox)
 
-        fillPaint.color = Color.argb((a255 * 0.40f).toInt(), 16, 20, 30)
-        canvas.drawRoundRect(tempRect, dp(18f), dp(18f), fillPaint)
+        // Degradado de cristal templado oscuro
+        fillPaint.shader = LinearGradient(
+            cx - wBox, cy - hBox, cx + wBox, cy + hBox,
+            intArrayOf(
+                Color.argb((a255 * 0.28f).toInt(), 160, 190, 240),
+                Color.argb((a255 * 0.35f).toInt(), 14, 18, 28),
+                Color.argb((a255 * 0.50f).toInt(), 8, 10, 16)
+            ),
+            floatArrayOf(0.0f, 0.4f, 1.0f),
+            Shader.TileMode.CLAMP
+        )
+        canvas.drawRoundRect(tempRect, dp(22f), dp(22f), fillPaint)
 
-        strokePaint.color = Color.parseColor("#40C4FF")
-        strokePaint.alpha = (a255 * 0.85f).toInt()
-        strokePaint.strokeWidth = dp(1.8f)
-        canvas.drawRoundRect(tempRect, dp(18f), dp(18f), strokePaint)
+        // Borde superior iluminado (Rim Light)
+        strokePaint.shader = LinearGradient(
+            cx, cy - hBox, cx, cy + hBox,
+            intArrayOf(
+                Color.argb((a255 * 0.70f).toInt(), 255, 255, 255),
+                Color.argb((a255 * 0.25f).toInt(), 100, 180, 255),
+                Color.argb((a255 * 0.12f).toInt(), 255, 255, 255)
+            ),
+            null,
+            Shader.TileMode.CLAMP
+        )
+        strokePaint.strokeWidth = dp(1.6f)
+        canvas.drawRoundRect(tempRect, dp(22f), dp(22f), strokePaint)
 
-        // Retícula central tenue
+        // Retícula central de precisión
+        strokePaint.shader = null
         strokePaint.color = Color.WHITE
-        strokePaint.alpha = (a255 * 0.35f).toInt()
+        strokePaint.alpha = (a255 * 0.28f).toInt()
         strokePaint.strokeWidth = dp(1.2f)
-        canvas.drawLine(cx - dp(18f), cy, cx + dp(18f), cy, strokePaint)
-        canvas.drawLine(cx, cy - dp(18f), cx, cy + dp(18f), strokePaint)
+        canvas.drawLine(cx - dp(14f), cy, cx + dp(14f), cy, strokePaint)
+        canvas.drawLine(cx, cy - dp(14f), cx, cy + dp(14f), strokePaint)
 
-        textPaint.color = Color.WHITE
-        textPaint.alpha = (a255 * 0.70f).toInt()
-        textPaint.textSize = dp(11f)
-        canvas.drawText("TRACKPAD MIRA", cx, cy + hBox - dp(10f), textPaint)
-    }
-
-    private fun drawJoystick(
-        canvas: Canvas,
-        cx: Float,
-        cy: Float,
-        r: Float,
-        alpha: Float,
-        st: ControlItemState
-    ) {
-        val a255 = (alpha * 255).toInt().coerceIn(20, 255)
-        fillPaint.color = Color.argb((a255 * 0.45f).toInt(), 18, 22, 30)
-        canvas.drawCircle(cx, cy, r, fillPaint)
-
-        strokePaint.color = if (joySprinting) Color.parseColor("#FFB300") else Color.WHITE
-        strokePaint.alpha = a255
-        strokePaint.strokeWidth = dp(2f)
-        canvas.drawCircle(cx, cy, r, strokePaint)
-
+        textPaint.shader = null
         textPaint.color = Color.WHITE
         textPaint.alpha = (a255 * 0.65f).toInt()
-        textPaint.textSize = r * 0.22f
-        canvas.drawText("W", cx, cy - r * 0.68f + textPaint.textSize * 0.35f, textPaint)
-        canvas.drawText("S", cx, cy + r * 0.72f + textPaint.textSize * 0.35f, textPaint)
-        canvas.drawText("A", cx - r * 0.72f, cy + textPaint.textSize * 0.35f, textPaint)
-        canvas.drawText("D", cx + r * 0.72f, cy + textPaint.textSize * 0.35f, textPaint)
-
-        val maxDist = r * 0.62f
-        val kx = cx + joyDx * maxDist
-        val ky = cy + joyDy * maxDist
-        val kr = r * 0.36f
-        fillPaint.color = if (joySprinting) Color.parseColor("#FFB300") else Color.WHITE
-        fillPaint.alpha = (a255 * 0.85f).toInt()
-        canvas.drawCircle(kx, ky, kr, fillPaint)
+        textPaint.textSize = dp(10.5f)
+        canvas.drawText("TRACKPAD MIRA", cx, cy + hBox - dp(12f), textPaint)
     }
 
-    private fun drawActionButton(
+    // --- BOTONES CON CRISTAL LÍQUIDO Y BRILLO BISORT ---
+    private fun drawLiquidActionButton(
         canvas: Canvas,
         cx: Float,
         cy: Float,
@@ -220,38 +293,72 @@ class GameOverlayView(
         val isPressed = pressedButtons.contains(st.id) || (st.id == ControlId.AIM && aimToggled)
         val a255 = (alpha * 255).toInt().coerceIn(20, 255)
 
-        val isCombatPrimary = st.id == ControlId.FIRE || st.id == ControlId.FIRE_LEFT || st.id == ControlId.AIM
-        fillPaint.color = when {
-            isPressed -> Color.parseColor("#00E5FF")
-            isCombatPrimary -> Color.rgb(30, 36, 48)
-            else -> Color.rgb(18, 22, 30)
+        // Relleno de cristal
+        if (isPressed) {
+            // Cristal comprimido iluminado desde adentro
+            fillPaint.shader = RadialGradient(
+                cx, cy, r,
+                intArrayOf(
+                    Color.argb((a255 * 0.95f).toInt(), 0, 229, 255),
+                    Color.argb((a255 * 0.75f).toInt(), 24, 70, 130),
+                    Color.argb((a255 * 0.85f).toInt(), 8, 16, 32)
+                ),
+                floatArrayOf(0.0f, 0.65f, 1.0f),
+                Shader.TileMode.CLAMP
+            )
+        } else {
+            // Vidrio translúcido reposado con degradado de luz superior
+            val isFire = st.id == ControlId.FIRE || st.id == ControlId.FIRE_LEFT
+            val isAim = st.id == ControlId.AIM
+            val tintR = if (isFire) 255 else if (isAim) 80 else 180
+            val tintG = if (isFire) 110 else if (isAim) 180 else 200
+            val tintB = if (isFire) 64 else if (isAim) 255 else 235
+
+            fillPaint.shader = LinearGradient(
+                cx, cy - r, cx, cy + r,
+                intArrayOf(
+                    Color.argb((a255 * 0.32f).toInt(), tintR, tintG, tintB),
+                    Color.argb((a255 * 0.38f).toInt(), 20, 26, 40),
+                    Color.argb((a255 * 0.62f).toInt(), 8, 12, 20)
+                ),
+                floatArrayOf(0.0f, 0.45f, 1.0f),
+                Shader.TileMode.CLAMP
+            )
         }
-        fillPaint.alpha = if (isPressed) (a255 * 0.9f).toInt().coerceAtLeast(150) else (a255 * 0.65f).toInt()
         canvas.drawCircle(cx, cy, r, fillPaint)
 
-        strokePaint.color = when {
-            isPressed -> Color.WHITE
-            st.id == ControlId.FIRE || st.id == ControlId.FIRE_LEFT -> Color.parseColor("#FF6E40")
-            st.id == ControlId.AIM -> Color.parseColor("#40C4FF")
-            else -> Color.WHITE
-        }
-        strokePaint.alpha = a255
-        strokePaint.strokeWidth = dp(1.8f)
+        // Borde de cristal biselado con reflejo luminoso
+        strokePaint.shader = LinearGradient(
+            cx, cy - r, cx, cy + r,
+            intArrayOf(
+                if (isPressed) Color.WHITE else Color.argb((a255 * 0.85f).toInt(), 255, 255, 255),
+                if (isPressed) Color.argb(a255, 0, 229, 255) else Color.argb((a255 * 0.25f).toInt(), 160, 200, 255),
+                Color.argb((a255 * 0.12f).toInt(), 255, 255, 255)
+            ),
+            floatArrayOf(0.0f, 0.55f, 1.0f),
+            Shader.TileMode.CLAMP
+        )
+        strokePaint.strokeWidth = dp(1.6f)
         canvas.drawCircle(cx, cy, r, strokePaint)
 
-        iconPaint.color = if (isPressed) Color.BLACK else Color.WHITE
-        iconPaint.alpha = a255
-        iconPaint.strokeWidth = dp(2f)
+        // Íconos nítidos
+        iconPaint.shader = null
+        iconPaint.color = if (isPressed) Color.WHITE else Color.WHITE
+        iconPaint.alpha = if (isPressed) 255 else (a255 * 0.95f).toInt()
+        iconPaint.strokeWidth = dp(1.9f)
+        iconFillPaint.shader = null
         iconFillPaint.color = iconPaint.color
-        iconFillPaint.alpha = a255
+        iconFillPaint.alpha = iconPaint.alpha
 
-        drawVectorIcon(canvas, st, cx, cy, r * 0.48f)
+        drawVectorIcon(canvas, st, cx, cy, r * 0.46f)
 
-        badgePaint.color = if (isPressed) Color.BLACK else Color.WHITE
-        badgePaint.alpha = (a255 * 0.85f).toInt()
-        badgePaint.textSize = (r * 0.28f).coerceAtLeast(dp(8.5f))
+        // Badge / tecla con brillo sutil
         if (st.id.icon != IconStyle.SLOT) {
-            canvas.drawText(st.id.badge, cx, cy + r * 0.72f, badgePaint)
+            badgePaint.shader = null
+            badgePaint.color = if (isPressed) Color.parseColor("#E0F7FA") else Color.WHITE
+            badgePaint.alpha = (a255 * 0.80f).toInt()
+            badgePaint.textSize = (r * 0.26f).coerceAtLeast(dp(8.5f))
+            canvas.drawText(st.id.badge, cx, cy + r * 0.73f, badgePaint)
         }
     }
 
@@ -332,7 +439,7 @@ class GameOverlayView(
             }
             IconStyle.INTERACT -> {
                 tempRect.set(cx - s * 0.48f, oy - s * 0.45f, cx + s * 0.48f, oy + s * 0.45f)
-                canvas.drawRoundRect(tempRect, dp(4f), dp(4f), iconPaint)
+                canvas.drawRoundRect(tempRect, dp(6f), dp(6f), iconPaint)
                 canvas.drawCircle(cx, oy, s * 0.16f, iconFillPaint)
             }
             IconStyle.PING -> {
@@ -345,12 +452,14 @@ class GameOverlayView(
                 canvas.drawCircle(cx, oy - s * 0.08f, s * 0.14f, iconFillPaint)
             }
             IconStyle.SLOT -> {
+                textPaint.shader = null
                 textPaint.color = iconPaint.color
                 textPaint.alpha = iconPaint.alpha
                 textPaint.textSize = s * 1.15f
                 canvas.drawText(st.id.badge, cx, cy + textPaint.textSize * 0.35f, textPaint)
             }
             IconStyle.MAP, IconStyle.TAB, IconStyle.ESC -> {
+                textPaint.shader = null
                 textPaint.color = iconPaint.color
                 textPaint.alpha = iconPaint.alpha
                 textPaint.textSize = s * 0.72f
@@ -421,7 +530,6 @@ class GameOverlayView(
             invalidate()
             return
         }
-
         val hit = hitTestControl(x, y, false)
         if (hit != null) {
             when (hit.id) {
@@ -534,6 +642,7 @@ class GameOverlayView(
         }
         updateAdsFlag()
     }
+
     private fun onButtonUp(id: ControlId) {
         pressedButtons.remove(id)
         if (id == ControlId.AIM && config.aimToggleMode) {
