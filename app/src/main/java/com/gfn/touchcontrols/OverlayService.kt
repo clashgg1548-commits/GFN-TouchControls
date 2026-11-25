@@ -55,7 +55,6 @@ class OverlayService : Service(), SensorEventListener {
     private var hudPaused = false
     private var lastGyroTs = 0L
 
-    // Vistas del editor dentro del panel
     private var editTargetLabel: TextView? = null
     private var editSizeSeek: SeekBar? = null
     private var editVisibleCheck: CheckBox? = null
@@ -122,7 +121,28 @@ class OverlayService : Service(), SensorEventListener {
         }
     }
 
-     
+    private fun baseLayoutParams(w: Int, h: Int): WindowManager.LayoutParams {
+        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        } else {
+            @Suppress("DEPRECATION")
+            WindowManager.LayoutParams.TYPE_PHONE
+        }
+        return WindowManager.LayoutParams(
+            w,
+            h,
+            type,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_FULLSCREEN,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+        }
+    }
 
     private fun createHudOverlay() {
         val view = GameOverlayView(
@@ -198,7 +218,6 @@ class OverlayService : Service(), SensorEventListener {
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    // Abrir con toque o al deslizar hacia adentro
                     if (!moved || (ev.rawX - downRawX) > 25) {
                         toggleControlCenter()
                     }
@@ -249,7 +268,6 @@ class OverlayService : Service(), SensorEventListener {
             }
         }
 
-        // Header
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -281,7 +299,6 @@ class OverlayService : Service(), SensorEventListener {
             setPadding(0, (6 * d).toInt(), 0, (10 * d).toInt())
         }
 
-        // Fila acciones rápidas
         val quickRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val btnPause = Button(this).apply {
             text = if (hudPaused) "Mostrar HUD" else "Modo Cursor"
@@ -315,7 +332,6 @@ class OverlayService : Service(), SensorEventListener {
         quickRow.addView(btnEdit)
         body.addView(quickRow)
 
-        // Editor del control seleccionado
         addSectionTitle(body, "Botón seleccionado (tocá uno en Modo Mover)")
         val lblTarget = TextView(this).apply {
             setTextColor(Color.parseColor("#00E5FF"))
@@ -346,7 +362,6 @@ class OverlayService : Service(), SensorEventListener {
         editSizeSeek = seekSize
         syncEditPanelSelection(hudView?.selectedEditId ?: ControlId.FIRE)
 
-        // Visibilidad rápida de botones Battlefield
         addSectionTitle(body, "Mostrar / Ocultar botones rápido")
         for (id in ControlId.entries) {
             if (id == ControlId.JOYSTICK) continue
@@ -365,7 +380,6 @@ class OverlayService : Service(), SensorEventListener {
             body.addView(cb)
         }
 
-        // Sección Giroscopio RAW
         addSectionTitle(body, "Giroscopio RAW (cero suavizado / cero delay)")
         addSwitch(body, "Activar Giroscopio", config.gyroEnabled) {
             config.gyroEnabled = it
@@ -392,7 +406,6 @@ class OverlayService : Service(), SensorEventListener {
             config.save()
         }
 
-        // Sección Mira táctil y jugabilidad
         addSectionTitle(body, "Mira Táctil & Jugabilidad")
         addSlider(body, "Sensibilidad Mira Táctil X", 20, 400, (config.touchSensX * 100f).toInt()) {
             config.touchSensX = it / 100f
@@ -411,7 +424,6 @@ class OverlayService : Service(), SensorEventListener {
             config.save()
         }
 
-        // Sección Apariencia
         addSectionTitle(body, "Vista y Opacidad")
         addSlider(body, "Opacidad de botones (%)", 15, 95, (config.hudAlpha * 100f).toInt()) {
             config.hudAlpha = it / 100f
@@ -551,20 +563,19 @@ class OverlayService : Service(), SensorEventListener {
             return
         }
         val dt = (event.timestamp - lastGyroTs) * 1e-9f
-        lastGyroTs = event.timestamp
+  lastGyroTs = event.timestamp
         if (dt <= 0f || dt > 0.1f) return
 
         val gx = event.values[0]
         val gy = event.values[1]
 
         val rot = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            hudView?.display?.rotation ?: tabView?.display?.rotation ?: Surface.ROTATION_90
+            hv.display?.rotation ?: tabView?.display?.rotation ?: Surface.ROTATION_90
         } else {
             @Suppress("DEPRECATION")
             wm.defaultDisplay.rotation
         }
 
-        // En modo horizontal (landscape): gy es girar izquierda/derecha (yaw) y gx es arriba/abajo (pitch)
         val yawRate: Float
         val pitchRate: Float
         when (rot) {
@@ -592,7 +603,6 @@ class OverlayService : Service(), SensorEventListener {
         if (cleanYaw == 0f && cleanPitch == 0f) return
 
         val ySign = if (config.gyroInvertY) -1f else 1f
-        // Escala 1:1 directa sin saturar
         val dx = cleanYaw * dt * config.gyroSensX * 12f
         val dy = cleanPitch * dt * config.gyroSensY * 12f * ySign
 
