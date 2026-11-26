@@ -5,26 +5,38 @@ import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
 import rikka.shizuku.Shizuku
+import java.util.concurrent.Executors
 
 class ShizukuBridge(
-    private val appContext: Context,
+    private val context: Context,
     private val onStatusChanged: () -> Unit
 ) {
+    private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val connectExecutor = Executors.newSingleThreadExecutor()
     private var started = false
 
     private val permissionListener = Shizuku.OnRequestPermissionResultListener { _, grantResult ->
         if (grantResult == PackageManager.PERMISSION_GRANTED) {
-            connectVirtualHid()
+            connectVirtualHidAsync()
+        } else {
+            notifyStatus()
         }
-        notifyStatus()
     }
 
     private val binderReceivedListener = Shizuku.OnBinderReceivedListener {
-        notifyStatus()
+        if (hasShizukuPermission() && !VirtualHidController.isConnected) {
+            connectVirtualHidAsync()
+        } else {
+            notifyStatus()
+        }
     }
 
     private val binderDeadListener = Shizuku.OnBinderDeadListener {
+        notifyStatus()
+    }
+
+    private val controllerCallback: () -> Unit = {
         notifyStatus()
     }
 
@@ -35,8 +47,11 @@ class ShizukuBridge(
             Shizuku.addRequestPermissionResultListener(permissionListener)
             Shizuku.addBinderReceivedListener(binderReceivedListener)
             Shizuku.addBinderDeadListener(binderDeadListener)
-            VirtualHidController.statusListener = { notifyStatus() }
+            VirtualHidController.onStateChanged = controllerCallback
         } catch (_: Throwable) {
+        }
+        if (isShizukuAlive() && hasShizukuPermission() && !VirtualHidController.isConnected) {
+            connectVirtualHidAsync()
         }
     }
 
@@ -49,7 +64,9 @@ class ShizukuBridge(
             Shizuku.removeBinderDeadListener(binderDeadListener)
         } catch (_: Throwable) {
         }
-        VirtualHidController.statusListener = null
+        if (VirtualHidController.onStateChanged === controllerCallback) {
+            VirtualHidController.onStateChanged = null
+        }
     }
 
     fun isShizukuAlive(): Boolean = try {
@@ -73,7 +90,9 @@ class ShizukuBridge(
         false
     }
 
-    fun isFullyReady(): Boolean = hasShizukuPermission() && isMouseConnected()
+    fun isReady(): Boolean = hasShizukuPermission() && isMouseConnected()
+
+    fun statusText(): String = VirtualHidController.lastStatus
 
     fun connectOrRequestPermission(requestCode: Int = 1001) {
         try {
@@ -81,24 +100,25 @@ class ShizukuBridge(
                 notifyStatus()
                 return
             }
-            if (hasShizukuPermission()) {
-                connectVirtualHid()
-            } else {
+            if (!hasShizukuPermission()) {
                 Shizuku.requestPermission(requestCode)
+                notifyStatus()
+                return
             }
+            connectVirtualHidAsync()
         } catch (_: Throwable) {
+            notifyStatus()
         }
-        notifyStatus()
     }
 
-    fun connectVirtualHid() {
-        Thread {
+    fun connectVirtualHidAsync() {
+        connectExecutor.execute {
             try {
                 VirtualHidController.connect(appContext)
             } catch (_: Throwable) {
             }
             notifyStatus()
-        }.start()
+        }
     }
 
     private fun notifyStatus() {
