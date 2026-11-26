@@ -1,4 +1,4 @@
-Package com.gfn.touchcontrols
+package com.gfn.touchcontrols
 
 import android.Manifest
 import android.animation.ValueAnimator
