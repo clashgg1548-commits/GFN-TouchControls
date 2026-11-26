@@ -124,7 +124,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ------------------------------------------------------------------
-    //  APARIENCIA: paleta, desenfoque y barras del sistema
+    //  APARIENCIA: paleta, desenfoque de fondo y barras del sistema
     // ------------------------------------------------------------------
 
     private fun saveAppearance() {
@@ -180,11 +180,13 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Tonos limpios sin velo grisáceo/blanquecino lavado
-        val base = if (light) Color.rgb(245, 246, 249) else Color.rgb(18, 20, 26)
-        val surfaceTone = if (light) Color.rgb(255, 255, 255) else Color.rgb(30, 33, 42)
-        val fillAlpha = (opacityPct.coerceIn(28, 70) / 100f * 255f).toInt()
-        val panelAlpha = (maxOf(opacityPct + 18, 65).coerceAtMost(88) / 100f * 255f).toInt()
+        val base = if (light) Color.WHITE else Color.rgb(18, 20, 26)
+        val surfaceTone = if (light) Color.WHITE else Color.rgb(28, 31, 40)
+        val fillAlpha = (opacityPct / 100f * 255f).toInt()
+        val panelAlpha = (maxOf(opacityPct + 18, 65).coerceAtMost(85) / 100f * 255f).toInt()
+
+        // Scrim translúcido para que se vea el fondo de pantalla desenfocado detrás
+        val scrimAlpha = if (themeMode == "wallpaper") 45 else if (light) 72 else 88
 
         return GlassPalette(
             isLight = light,
@@ -192,15 +194,13 @@ class MainActivity : AppCompatActivity() {
             accentSoft = if (light) accent else ColorUtils.blendARGB(accent, Color.WHITE, 0.22f),
             accentDark = ColorUtils.blendARGB(accent, Color.BLACK, 0.45f),
             text = if (light) Color.rgb(20, 22, 28) else Color.rgb(244, 246, 250),
-            textSub = if (light) Color.rgb(92, 98, 112) else Color.rgb(172, 178, 194),
-            textMuted = if (light) Color.rgb(130, 136, 150) else Color.rgb(122, 129, 146),
+            textSub = if (light) Color.rgb(75, 82, 96) else Color.rgb(182, 188, 204),
+            textMuted = if (light) Color.rgb(115, 122, 136) else Color.rgb(132, 139, 156),
             cardFill = withAlpha(surfaceTone, fillAlpha),
-            // Sin bordes rojos: solo un hilo ultra sutil para separar el tono
-            cardStroke = if (light) Color.argb(18, 0, 0, 0) else Color.argb(22, 255, 255, 255),
+            cardStroke = if (light) Color.argb(24, 0, 0, 0) else Color.argb(26, 255, 255, 255),
             panelFill = withAlpha(surfaceTone, panelAlpha),
-            scrim = if (light) Color.argb(215, 240, 242, 247) else Color.argb(210, 12, 14, 19),
-            ok = if (light) Color.rgb(34, 139, 78) else Color.rgb(74, 204, 122),
-            backdrop = base
+            scrim = withAlpha(base, scrimAlpha),
+            ok = if (light) Color.rgb(34, 139, 78) else Color.rgb(74, 204, 122)
         )
     }
 
@@ -220,12 +220,13 @@ class MainActivity : AppCompatActivity() {
     private fun applyWindowBlur() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val radius = if (crossWindowBlurEnabled()) {
-                (blurPct / 100f * 40f * resources.displayMetrics.density).toInt()
+                (blurPct / 100f * 45f * resources.displayMetrics.density).toInt()
             } else {
                 0
             }
             try {
                 window.setBackgroundBlurRadius(radius)
+                window.setDimAmount(if (radius > 0) 0.15f else 0.0f)
             } catch (_: Throwable) {
             }
         }
@@ -260,7 +261,7 @@ class MainActivity : AppCompatActivity() {
 
         val outerContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(pal.backdrop)
+            setBackgroundColor(Color.TRANSPARENT)
         }
 
         val root = LinearLayout(this).apply {
@@ -270,7 +271,7 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(pal.scrim)
         }
 
-        // --- 1. CABECERA LIMPIA (sin choque con la barra de estado) ---
+        // --- 1. CABECERA LIMPIA ---
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -281,7 +282,7 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             val sz = (44 * d).toInt()
             layoutParams = LinearLayout.LayoutParams(sz, sz)
-            background = createUnifiedBlockBg(14 * d, withAlpha(pal.accent, if (pal.isLight) 24 else 32), Color.TRANSPARENT, shadowDp = 2f * d)
+            background = createUnifiedBlockBg(14 * d, withAlpha(pal.accent, if (pal.isLight) 28 else 36), Color.TRANSPARENT)
             addView(VectorIconView(context, VectorType.GAMEPAD, pal.accent, dp(24f)))
         }
 
@@ -312,7 +313,9 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             val sz = (42 * d).toInt()
             layoutParams = LinearLayout.LayoutParams(sz, sz)
-            background = createUnifiedBlockBg(14 * d, pal.cardFill, pal.cardStroke, shadowDp = 3f * d)
+            background = createUnifiedBlockBg(14 * d, pal.cardFill, pal.cardStroke)
+            outlineProvider = RoundedOutlineProvider(14 * d)
+            elevation = 3 * d
             addView(VectorIconView(context, VectorType.GEAR, pal.text, dp(20f)))
         }
         makeClickable(btnSettings) { showSettingsDialog() }
@@ -326,7 +329,9 @@ class MainActivity : AppCompatActivity() {
         val heroCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding((18 * d).toInt(), (18 * d).toInt(), (18 * d).toInt(), (16 * d).toInt())
-            background = createUnifiedBlockBg(22 * d, pal.cardFill, pal.cardStroke, shadowDp = 6f * d)
+            background = createUnifiedBlockBg(22 * d, pal.cardFill, pal.cardStroke)
+            outlineProvider = RoundedOutlineProvider(22 * d)
+            elevation = 6 * d
         }
 
         val heroTop = LinearLayout(this).apply {
@@ -402,7 +407,6 @@ class MainActivity : AppCompatActivity() {
         root.addView(stepShizuku.root)
         root.addView(stepHud.root)
 
-        // Espacio flexible para centrar mejor la composición verticalmente
         root.addView(View(this).apply {
             minimumHeight = (16 * d).toInt()
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
@@ -418,7 +422,7 @@ class MainActivity : AppCompatActivity() {
         ).apply {
             cornerRadius = 20 * d
         }
-        playIdleBg = createUnifiedBlockBg(20 * d, pal.cardFill, pal.cardStroke, shadowDp = 5f * d)
+        playIdleBg = createUnifiedBlockBg(20 * d, pal.cardFill, pal.cardStroke)
 
         playCard = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -486,7 +490,7 @@ class MainActivity : AppCompatActivity() {
             letterSpacing = 0.20f
             gravity = Gravity.CENTER
             setPadding((16 * d).toInt(), (6 * d).toInt(), (16 * d).toInt(), (6 * d).toInt())
-            background = createUnifiedBlockBg(12 * d, withAlpha(pal.cardFill, 140), Color.TRANSPARENT, shadowDp = 0f)
+            background = createUnifiedBlockBg(12 * d, withAlpha(pal.cardFill, 140), Color.TRANSPARENT)
         }
 
         val footerSub = TextView(this).apply {
@@ -514,7 +518,6 @@ class MainActivity : AppCompatActivity() {
         outerContainer.addView(scroll)
         setContentView(outerContainer)
 
-        // Margen limpio en la barra de estado y navegación sin recortes ni choques
         ViewCompat.setOnApplyWindowInsetsListener(outerContainer) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(0, bars.top + (6 * d).toInt(), 0, bars.bottom)
@@ -564,7 +567,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Tarjeta de paso de una sola pieza, sin bordes rojos
     private fun createStepCard(
         d: Float,
         number: Int,
@@ -572,7 +574,7 @@ class MainActivity : AppCompatActivity() {
         subtitle: String,
         onClick: () -> Unit
     ): StepRefs {
-        val bg = createUnifiedBlockBg(18 * d, pal.cardFill, pal.cardStroke, shadowDp = 4f * d)
+        val bg = createUnifiedBlockBg(18 * d, pal.cardFill, pal.cardStroke)
 
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -620,13 +622,12 @@ class MainActivity : AppCompatActivity() {
         return StepRefs(card, badge, tvTitle, tvSub, bg)
     }
 
-    // Sin bordes rojos: solo sutil diferencia de tono en el paso actual
     private fun applyStepStyle(s: StepRefs, done: Boolean, current: Boolean) {
         val d = resources.displayMetrics.density
         s.badge.setState(done, current)
         when {
             current -> {
-                s.bg.setColor(withAlpha(pal.accent, if (pal.isLight) 24 else 34))
+                s.bg.setColor(withAlpha(pal.accent, if (pal.isLight) 26 else 36))
                 s.bg.setStroke((1 * d).toInt(), withAlpha(pal.accent, 65))
             }
             done -> {
@@ -868,17 +869,13 @@ class MainActivity : AppCompatActivity() {
     private fun createUnifiedBlockBg(
         radius: Float,
         fillColor: Int,
-        strokeColor: Int,
-        shadowDp: Float = 0f
+        strokeColor: Int
     ): GradientDrawable {
         return GradientDrawable().apply {
             setColor(fillColor)
             cornerRadius = radius
             if (strokeColor != Color.TRANSPARENT) {
                 setStroke((1f * resources.displayMetrics.density).toInt(), strokeColor)
-            }
-            if (shadowDp > 0f) {
-                // Mantiene compatibilidad de sombra sutil mediante elevación en la vista
             }
         }
     }
@@ -1043,8 +1040,7 @@ class GlassPalette(
     val cardStroke: Int,
     val panelFill: Int,
     val scrim: Int,
-    val ok: Int,
-    val backdrop: Int = Color.rgb(18, 20, 26)
+    val ok: Int
 )
 
 // --- ICONOS VECTORIALES CLEAN ---
