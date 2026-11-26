@@ -43,6 +43,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import rikka.shizuku.Shizuku
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -62,7 +63,6 @@ class MainActivity : AppCompatActivity() {
     private var opacityPct = 45         // 15..70
     private lateinit var pal: GlassPalette
     private var settingsDialog: Dialog? = null
-    private lateinit var shizukuBridge: ShizukuBridge
 
     private lateinit var outerContainer: LinearLayout
     private lateinit var rootLayout: LinearLayout
@@ -105,6 +105,13 @@ class MainActivity : AppCompatActivity() {
     private var uiReady = false
     private var breathingAnimator: ValueAnimator? = null
 
+    private val shizukuPermissionListener = Shizuku.OnRequestPermissionResultListener { _, grantResult ->
+        if (grantResult == PackageManager.PERMISSION_GRANTED) {
+            safeConnect()
+        }
+        refreshStatus()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -114,15 +121,14 @@ class MainActivity : AppCompatActivity() {
         opacityPct = prefs.getInt("opacity", 45).coerceIn(15, 70)
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+        try {
+            Shizuku.addRequestPermissionResultListener(shizukuPermissionListener)
+            VirtualHidController.statusListener = { runOnUiThread { refreshStatus() } }
+        } catch (_: Throwable) {
+        }
 
         buildUi()
-
-        shizukuBridge = ShizukuBridge(this) {
-            runOnUiThread { refreshStatus() }
-        }
-        shizukuBridge.start()
-        refreshStatus()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
@@ -195,9 +201,9 @@ class MainActivity : AppCompatActivity() {
         val panelTone = if (light) Color.rgb(250, 251, 253) else Color.rgb(22, 25, 33)
         val fillAlpha = (opacityPct / 100f * 255f).toInt()
         val scrimAlpha = if (themeMode == "wallpaper") {
-            if (light) 70 else 45
+            if (light) 115 else 75
         } else {
-            if (light) 125 else 55
+            if (light) 165 else 95
         }
 
         return GlassPalette(
@@ -231,15 +237,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun applyWindowBlur() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val radius = if (crossWindowBlurEnabled() && blurPct > 0) {
-                (blurPct / 100f * 50f * resources.displayMetrics.density).toInt()
+            val radius = if (crossWindowBlurEnabled()) {
+                (blurPct / 100f * 45f * resources.displayMetrics.density).toInt()
             } else {
                 0
             }
             try {
-                window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
                 window.setBackgroundBlurRadius(radius)
-                window.setDimAmount(if (radius > 0) 0.08f else 0.0f)
+                window.setDimAmount(if (radius > 0) 0.14f else 0.0f)
             } catch (_: Throwable) {
             }
         }
@@ -444,7 +449,7 @@ class MainActivity : AppCompatActivity() {
         )
         rootLayout.addView(heroCard)
 
-        rootLayout.addView(space(16 * d))
+        rootLayout.addView(space(20 * d))
 
         // --- 3. PASOS NUMERADOS ---
         sectionLabel = TextView(this).apply {
@@ -465,7 +470,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         stepShizuku = createStepCard(d, 2, "Conectar Shizuku", "Ratón virtual (uinput)") {
-            shizukuBridge.connectOrRequestPermission(1001)
+            connectShizuku()
         }
         stepHud = createStepCard(d, 3, "Iniciar HUD", "Activar controles") {
             toggleOverlay()
@@ -474,7 +479,7 @@ class MainActivity : AppCompatActivity() {
         rootLayout.addView(stepShizuku.root)
         rootLayout.addView(stepHud.root)
 
-        rootLayout.addView(space(16 * d))
+        rootLayout.addView(space(18 * d))
 
         // --- 4. BOTÓN GRANDE JUGAR ---
         playReadyBg = GradientDrawable(
@@ -522,13 +527,17 @@ class MainActivity : AppCompatActivity() {
         playCard.addView(playIcon)
         playCard.addView(playTextCol)
         playCard.addView(playArrow)
-
         makeClickable(playCard) {
-            if (!allReady) {
+            if (allReady) {
+                val launch = packageManager.getLaunchIntentForPackage("com.nvidia.geforcenow")
+                if (launch != null) {
+                    startActivity(launch)
+                } else {
+                    playSub.text = "GFN no instalado"
+                }
+            } else {
                 playSub.text = "Primero completa los pasos de arriba"
-                return@makeClickable
             }
-            launchGeForceNow()
         }
         rootLayout.addView(playCard)
 
@@ -590,23 +599,6 @@ class MainActivity : AppCompatActivity() {
 
         uiReady = true
         refreshStatus()
-    }
-
-    private fun launchGeForceNow() {
-        val targetPkg = "com.nvidia.geforcenow"
-        val launchIntent = packageManager.getLaunchIntentForPackage(targetPkg)?.apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        } ?: Intent(Intent.ACTION_MAIN).apply {
-            setPackage(targetPkg)
-            addCategory(Intent.CATEGORY_LAUNCHER)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-
-        try {
-            startActivity(launchIntent)
-        } catch (_: Throwable) {
-            playSub.text = "GFN no instalado"
-        }
     }
 
     private fun dp(v: Float) = v * resources.displayMetrics.density
@@ -841,6 +833,7 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
+    // Helper para unificar botones/chips en diálogos y Centro de Control
     private fun createStyledActionChip(
         text: String,
         bgColor: Int,
@@ -960,7 +953,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ------------------------------------------------------------------
-    //  UTILIDADES VISUALES Y ESTADO
+    //  UTILIDADES VISUALES
     // ------------------------------------------------------------------
 
     private fun createEdgeShadedBg(
@@ -993,6 +986,32 @@ class MainActivity : AppCompatActivity() {
         refreshStatus()
     }
 
+    private fun safeConnect() {
+        Thread {
+            try {
+                VirtualHidController.connect(this)
+            } catch (_: Throwable) {
+            }
+            runOnUiThread { refreshStatus() }
+        }.start()
+    }
+
+    private fun connectShizuku() {
+        try {
+            if (!Shizuku.pingBinder()) {
+                refreshStatus()
+                return
+            }
+            if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+                safeConnect()
+            } else {
+                Shizuku.requestPermission(1001)
+            }
+        } catch (_: Throwable) {
+        }
+        refreshStatus()
+    }
+
     private fun toggleOverlay() {
         if (!Settings.canDrawOverlays(this)) {
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
@@ -1013,13 +1032,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refreshStatus() {
-        if (!uiReady || !::shizukuBridge.isInitialized) return
+        if (!uiReady) return
 
         val overlayOk = Settings.canDrawOverlays(this)
-        val shizukuAlive = shizukuBridge.isShizukuAlive()
-        val shizukuPerm = shizukuBridge.hasShizukuPermission()
-        val mouseOk = shizukuBridge.isMouseConnected()
-        val connected = shizukuBridge.isReady()
+        val shizukuAlive = try { Shizuku.pingBinder() } catch (_: Throwable) { false }
+        val shizukuPerm = shizukuAlive && try {
+            Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+        } catch (_: Throwable) {
+            false
+        }
+        val mouseOk = VirtualHidController.isConnected
+        val connected = shizukuPerm && mouseOk
         val hudRunning = OverlayService.isRunning
 
         checkOverlay.setChecked(overlayOk)
@@ -1073,9 +1096,11 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         breathingAnimator?.cancel()
         settingsDialog?.dismiss()
-        if (::shizukuBridge.isInitialized) {
-            shizukuBridge.stop()
+        try {
+            Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener)
+        } catch (_: Throwable) {
         }
+        VirtualHidController.statusListener = null
         super.onDestroy()
     }
 }
