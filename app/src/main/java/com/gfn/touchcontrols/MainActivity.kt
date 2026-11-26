@@ -12,7 +12,6 @@ import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Outline
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
@@ -29,7 +28,6 @@ import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.view.ViewOutlineProvider
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -66,12 +64,26 @@ class MainActivity : AppCompatActivity() {
     private lateinit var pal: GlassPalette
     private var settingsDialog: Dialog? = null
 
+    private lateinit var outerContainer: LinearLayout
+    private lateinit var rootLayout: LinearLayout
+    private lateinit var logoBadge: LinearLayout
+    private lateinit var logoIcon: VectorIconView
+    private lateinit var titleMain: TextView
+    private lateinit var titleSub: TextView
+    private lateinit var btnSettings: LinearLayout
+    private lateinit var btnSettingsBg: GradientDrawable
+    private lateinit var btnSettingsIcon: VectorIconView
+
+    private lateinit var heroCard: LinearLayout
+    private lateinit var heroCardBg: GradientDrawable
+    private lateinit var gfnTitleTv: TextView
     private lateinit var checkOverlay: StatusCheckView
     private lateinit var checkShizukuAlive: StatusCheckView
     private lateinit var checkShizukuPerm: StatusCheckView
     private lateinit var checkMouse: StatusCheckView
     private lateinit var tvGfnSub: TextView
 
+    private lateinit var sectionLabel: TextView
     private lateinit var stepOverlay: StepRefs
     private lateinit var stepShizuku: StepRefs
     private lateinit var stepHud: StepRefs
@@ -85,6 +97,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var playIdleBg: GradientDrawable
     private var allReady = false
 
+    private lateinit var footerFrame: TextView
+    private lateinit var footerFrameBg: GradientDrawable
+    private lateinit var footerSub: TextView
+
+    private var topInsetPx = 0
+    private var bottomInsetPx = 0
     private var uiReady = false
     private var breathingAnimator: ValueAnimator? = null
 
@@ -194,7 +212,7 @@ class MainActivity : AppCompatActivity() {
             textSub = if (light) Color.rgb(52, 58, 70) else Color.rgb(182, 188, 204),
             textMuted = if (light) Color.rgb(86, 93, 108) else Color.rgb(132, 139, 156),
             cardFill = withAlpha(surfaceTone, fillAlpha),
-            cardStroke = if (light) Color.argb(28, 0, 0, 0) else Color.argb(32, 255, 255, 255),
+            cardStroke = if (light) Color.argb(24, 0, 0, 0) else Color.argb(26, 255, 255, 255),
             panelFill = withAlpha(panelTone, 244),
             scrim = withAlpha(base, scrimAlpha),
             ok = if (light) Color.rgb(34, 139, 78) else Color.rgb(74, 204, 122)
@@ -237,11 +255,59 @@ class MainActivity : AppCompatActivity() {
         c.isAppearanceLightNavigationBars = pal.isLight
     }
 
-    private fun applyAppearanceAndReopen(scrollY: Int) {
+    // Actualiza en vivo sin destruir el layout ni mover la posición
+    private fun applyAppearanceLive() {
         saveAppearance()
-        settingsDialog?.dismiss()
-        buildUi()
-        showSettingsDialog(scrollY)
+        pal = buildPalette()
+        val d = resources.displayMetrics.density
+
+        rootLayout.setBackgroundColor(pal.scrim)
+        (logoBadge.background as? GradientDrawable)?.setColor(withAlpha(pal.accent, if (pal.isLight) 28 else 36))
+        logoIcon.iconColor = pal.accent
+
+        titleMain.setTextColor(pal.text)
+        titleSub.setTextColor(pal.textSub)
+
+        btnSettingsBg.setColor(pal.cardFill)
+        btnSettingsBg.setStroke((1 * d).toInt(), pal.cardStroke)
+        btnSettingsIcon.iconColor = pal.text
+
+        heroCardBg.setColor(pal.cardFill)
+        heroCardBg.setStroke((1 * d).toInt(), pal.cardStroke)
+        gfnTitleTv.setTextColor(pal.text)
+
+        checkOverlay.applyPalette(pal)
+        checkShizukuAlive.applyPalette(pal)
+        checkShizukuPerm.applyPalette(pal)
+        checkMouse.applyPalette(pal)
+
+        sectionLabel.setTextColor(pal.textMuted)
+
+        playReadyBg.colors = intArrayOf(
+            pal.accent,
+            ColorUtils.blendARGB(pal.accent, pal.accentDark, 0.55f)
+        )
+        playIdleBg.setColor(pal.cardFill)
+        playIdleBg.setStroke((1 * d).toInt(), pal.cardStroke)
+
+        footerFrame.setTextColor(pal.textSub)
+        footerFrameBg.setColor(withAlpha(pal.cardFill, 140))
+        footerSub.setTextColor(pal.textMuted)
+
+        applyInsetsPadding()
+        applySystemBars()
+        applyWindowBlur()
+        refreshStatus()
+    }
+
+    private fun applyInsetsPadding() {
+        val d = resources.displayMetrics.density
+        val fallbackTop = resources.getIdentifier("status_bar_height", "dimen", "android")
+            .takeIf { it > 0 }
+            ?.let { resources.getDimensionPixelSize(it) }
+            ?: (28 * d).toInt()
+        val safeTop = maxOf(topInsetPx, fallbackTop)
+        outerContainer.setPadding(0, safeTop + (8 * d).toInt(), 0, maxOf(bottomInsetPx, (10 * d).toInt()))
     }
 
     // ------------------------------------------------------------------
@@ -256,33 +322,32 @@ class MainActivity : AppCompatActivity() {
         val d = resources.displayMetrics.density
         val padH = (18 * d).toInt()
 
-        val outerContainer = LinearLayout(this).apply {
+        outerContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.TRANSPARENT)
         }
 
-        val root = LinearLayout(this).apply {
+        rootLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(padH, (22 * d).toInt(), padH, (18 * d).toInt())
+            setPadding(padH, (14 * d).toInt(), padH, (16 * d).toInt())
             setBackgroundColor(pal.scrim)
         }
 
-        // --- 1. CABECERA LIMPIA (con margen extra respecto a la barra superior) ---
+        // --- 1. CABECERA LIMPIA ---
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding((2 * d).toInt(), (12 * d).toInt(), (2 * d).toInt(), (20 * d).toInt())
+            setPadding((2 * d).toInt(), (6 * d).toInt(), (2 * d).toInt(), (18 * d).toInt())
         }
 
-        val logoBadge = LinearLayout(this).apply {
+        logoIcon = VectorIconView(this, VectorType.GAMEPAD, pal.accent, dp(24f))
+        logoBadge = LinearLayout(this).apply {
             gravity = Gravity.CENTER
             val sz = (44 * d).toInt()
             layoutParams = LinearLayout.LayoutParams(sz, sz)
-            background = createEdgeShadedBg(14 * d, withAlpha(pal.accent, if (pal.isLight) 28 else 36), withAlpha(pal.accent, 55))
-            outlineProvider = RoundedOutlineProvider(14 * d)
-            elevation = 2 * d
-            addView(VectorIconView(context, VectorType.GAMEPAD, pal.accent, dp(24f)))
+            background = createEdgeShadedBg(14 * d, withAlpha(pal.accent, if (pal.isLight) 28 else 36), Color.TRANSPARENT)
+            addView(logoIcon)
         }
 
         val titleContainer = LinearLayout(this).apply {
@@ -291,7 +356,7 @@ class MainActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
 
-        val titleMain = TextView(this).apply {
+        titleMain = TextView(this).apply {
             text = "GFN"
             textSize = 23f
             setTextColor(pal.text)
@@ -299,7 +364,7 @@ class MainActivity : AppCompatActivity() {
             letterSpacing = 0.02f
         }
 
-        val titleSub = TextView(this).apply {
+        titleSub = TextView(this).apply {
             text = "Touch Controls"
             textSize = 13f
             setTextColor(pal.textSub)
@@ -308,29 +373,28 @@ class MainActivity : AppCompatActivity() {
         titleContainer.addView(titleMain)
         titleContainer.addView(titleSub)
 
-        val btnSettings = LinearLayout(this).apply {
+        btnSettingsBg = createEdgeShadedBg(14 * d, pal.cardFill, pal.cardStroke)
+        btnSettingsIcon = VectorIconView(this, VectorType.GEAR, pal.text, dp(20f))
+        btnSettings = LinearLayout(this).apply {
             gravity = Gravity.CENTER
             val sz = (42 * d).toInt()
             layoutParams = LinearLayout.LayoutParams(sz, sz)
-            background = createEdgeShadedBg(14 * d, pal.cardFill, pal.cardStroke)
-            outlineProvider = RoundedOutlineProvider(14 * d)
-            elevation = 3 * d
-            addView(VectorIconView(context, VectorType.GEAR, pal.text, dp(20f)))
+            background = btnSettingsBg
+            addView(btnSettingsIcon)
         }
         makeClickable(btnSettings) { showSettingsDialog() }
 
         header.addView(logoBadge)
         header.addView(titleContainer)
         header.addView(btnSettings)
-        root.addView(header)
+        rootLayout.addView(header)
 
         // --- 2. TARJETA DE ESTADO ---
-        val heroCard = LinearLayout(this).apply {
+        heroCardBg = createEdgeShadedBg(22 * d, pal.cardFill, pal.cardStroke)
+        heroCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding((18 * d).toInt(), (18 * d).toInt(), (18 * d).toInt(), (16 * d).toInt())
-            background = createEdgeShadedBg(22 * d, pal.cardFill, pal.cardStroke)
-            outlineProvider = RoundedOutlineProvider(22 * d)
-            elevation = 5 * d
+            background = heroCardBg
         }
 
         val heroTop = LinearLayout(this).apply {
@@ -342,7 +406,7 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding((14 * d).toInt(), 0, 0, 0)
         }
-        val gfnText = TextView(this).apply {
+        gfnTitleTv = TextView(this).apply {
             text = "GeForce NOW"
             textSize = 15.5f
             setTextColor(pal.text)
@@ -353,7 +417,7 @@ class MainActivity : AppCompatActivity() {
             textSize = 12f
             setTextColor(pal.textSub)
         }
-        gfnTextCol.addView(gfnText)
+        gfnTextCol.addView(gfnTitleTv)
         gfnTextCol.addView(tvGfnSub)
         heroTop.addView(gfnLogo)
         heroTop.addView(gfnTextCol)
@@ -374,12 +438,12 @@ class MainActivity : AppCompatActivity() {
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
                 .apply { topMargin = (8 * d).toInt() }
         )
-        root.addView(heroCard)
+        rootLayout.addView(heroCard)
 
-        root.addView(space(22 * d))
+        rootLayout.addView(space(20 * d))
 
         // --- 3. PASOS NUMERADOS ---
-        val sectionLabel = TextView(this).apply {
+        sectionLabel = TextView(this).apply {
             text = "CONFIGURACIÓN"
             textSize = 10.5f
             setTextColor(pal.textMuted)
@@ -388,7 +452,7 @@ class MainActivity : AppCompatActivity() {
             setPadding((6 * d).toInt(), 0, 0, (10 * d).toInt())
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
-        root.addView(sectionLabel)
+        rootLayout.addView(sectionLabel)
 
         stepOverlay = createStepCard(d, 1, "Permiso Overlay", "Mostrar sobre apps") {
             try {
@@ -402,14 +466,11 @@ class MainActivity : AppCompatActivity() {
         stepHud = createStepCard(d, 3, "Iniciar HUD", "Activar controles") {
             toggleOverlay()
         }
-        root.addView(stepOverlay.root)
-        root.addView(stepShizuku.root)
-        root.addView(stepHud.root)
+        rootLayout.addView(stepOverlay.root)
+        rootLayout.addView(stepShizuku.root)
+        rootLayout.addView(stepHud.root)
 
-        root.addView(View(this).apply {
-            minimumHeight = (16 * d).toInt()
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
-        })
+        rootLayout.addView(space(18 * d))
 
         // --- 4. BOTÓN GRANDE JUGAR ---
         playReadyBg = GradientDrawable(
@@ -432,9 +493,6 @@ class MainActivity : AppCompatActivity() {
                 (70 * d).toInt()
             )
             background = playIdleBg
-            outlineProvider = RoundedOutlineProvider(20 * d)
-            clipToOutline = false
-            elevation = 5 * d
         }
         playIcon = VectorIconView(this, VectorType.PLAY_ARROW, pal.textMuted, 24 * d)
         val playTextCol = LinearLayout(this).apply {
@@ -472,7 +530,7 @@ class MainActivity : AppCompatActivity() {
                 playSub.text = "Primero completa los pasos de arriba"
             }
         }
-        root.addView(playCard)
+        rootLayout.addView(playCard)
 
         // --- 5. PIE DE PÁGINA CLEAN ---
         val footer = LinearLayout(this).apply {
@@ -481,7 +539,8 @@ class MainActivity : AppCompatActivity() {
             setPadding(0, (18 * d).toInt(), 0, (6 * d).toInt())
         }
 
-        val footerFrame = TextView(this).apply {
+        footerFrameBg = createEdgeShadedBg(12 * d, withAlpha(pal.cardFill, 140), Color.TRANSPARENT)
+        footerFrame = TextView(this).apply {
             text = "GFN TOUCH CONTROLS"
             textSize = 10f
             setTextColor(pal.textSub)
@@ -489,10 +548,10 @@ class MainActivity : AppCompatActivity() {
             letterSpacing = 0.20f
             gravity = Gravity.CENTER
             setPadding((16 * d).toInt(), (6 * d).toInt(), (16 * d).toInt(), (6 * d).toInt())
-            background = createEdgeShadedBg(12 * d, withAlpha(pal.cardFill, 140), Color.TRANSPARENT)
+            background = footerFrameBg
         }
 
-        val footerSub = TextView(this).apply {
+        footerSub = TextView(this).apply {
             text = "CONTROL TOTAL EN TUS MANOS"
             textSize = 9f
             setTextColor(pal.textMuted)
@@ -503,7 +562,7 @@ class MainActivity : AppCompatActivity() {
 
         footer.addView(footerFrame)
         footer.addView(footerSub)
-        root.addView(footer)
+        rootLayout.addView(footer)
 
         val scroll = ScrollView(this).apply {
             isFillViewport = true
@@ -512,18 +571,21 @@ class MainActivity : AppCompatActivity() {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.MATCH_PARENT
             )
-            addView(root)
+            addView(rootLayout)
         }
         outerContainer.addView(scroll)
         setContentView(outerContainer)
 
-        ViewCompat.setOnApplyWindowInsetsListener(outerContainer) { v, insets ->
+        applyInsetsPadding()
+        ViewCompat.setOnApplyWindowInsetsListener(outerContainer) { _, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             val cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout())
-            val topInset = maxOf(bars.top, cutout.top)
-            v.setPadding(bars.left, topInset + (10 * d).toInt(), bars.right, bars.bottom)
+            topInsetPx = maxOf(bars.top, cutout.top)
+            bottomInsetPx = bars.bottom
+            applyInsetsPadding()
             insets
         }
+        ViewCompat.requestApplyInsets(outerContainer)
 
         applySystemBars()
         applyWindowBlur()
@@ -586,8 +648,6 @@ class MainActivity : AppCompatActivity() {
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { bottomMargin = (10 * d).toInt() }
             background = bg
-            outlineProvider = RoundedOutlineProvider(18 * d)
-            elevation = 3 * d
         }
 
         val badgeSize = (30 * d).toInt()
@@ -625,6 +685,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun applyStepStyle(s: StepRefs, done: Boolean, current: Boolean) {
         val d = resources.displayMetrics.density
+        s.badge.updatePalette(pal)
         s.badge.setState(done, current)
         when {
             current -> {
@@ -647,7 +708,7 @@ class MainActivity : AppCompatActivity() {
     //  AJUSTES (engranaje)
     // ------------------------------------------------------------------
 
-    private fun showSettingsDialog(restoreScroll: Int = 0) {
+    private fun showSettingsDialog() {
         val config = ControlConfig(this)
         val d = resources.displayMetrics.density
         val dialog = Dialog(this)
@@ -703,7 +764,9 @@ class MainActivity : AppCompatActivity() {
         addThemeSelector(body) { mode ->
             if (mode != themeMode) {
                 themeMode = mode
-                applyAppearanceAndReopen(scroll.scrollY)
+                applyAppearanceLive()
+                dialog.dismiss()
+                showSettingsDialog()
             }
         }
         addDialogSlider(body, "Desenfoque", 0, 100, blurPct) {
@@ -713,9 +776,12 @@ class MainActivity : AppCompatActivity() {
         }
         addDialogSlider(
             body, "Opacidad de paneles (%) · máx. 70", 15, 70, opacityPct,
-            onStop = { applyAppearanceAndReopen(scroll.scrollY) }
+            onStop = {
+                applyAppearanceLive()
+            }
         ) {
             opacityPct = it
+            applyAppearanceLive()
         }
         if (!blurSupported()) {
             val hint = TextView(this).apply {
@@ -762,10 +828,6 @@ class MainActivity : AppCompatActivity() {
         root.addView(scroll)
         dialog.setContentView(root)
         dialog.show()
-
-        if (restoreScroll > 0) {
-            scroll.post { scroll.scrollTo(0, restoreScroll) }
-        }
     }
 
     private fun addDialogTitle(parent: LinearLayout, title: String) {
@@ -882,12 +944,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private class RoundedOutlineProvider(private val radius: Float) : ViewOutlineProvider() {
-        override fun getOutline(view: View, outline: Outline) {
-            outline.setRoundRect(0, 0, view.width, view.height, radius)
-        }
-    }
-
     private fun space(h: Float) = View(this).apply {
         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, h.toInt())
     }
@@ -897,7 +953,7 @@ class MainActivity : AppCompatActivity() {
         if (themeMode == "wallpaper" && uiReady) {
             val np = buildPalette()
             if (np.accent != pal.accent || np.isLight != pal.isLight) {
-                buildUi()
+                applyAppearanceLive()
                 return
             }
         }
@@ -1081,11 +1137,14 @@ class VectorIconView(
     private val path = Path()
 
     init {
+        setWillNotDraw(false)
+        setBackgroundColor(Color.TRANSPARENT)
         layoutParams = ViewGroup.LayoutParams(sizePx.toInt(), sizePx.toInt())
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        setMeasuredDimension(sizePx.toInt(), sizePx.toInt())
+        val target = sizePx.toInt()
+        setMeasuredDimension(target, target)
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -1185,7 +1244,7 @@ class StepBadgeView(
     context: Context,
     private val number: Int,
     private val sizePx: Float,
-    private val pal: GlassPalette
+    private var pal: GlassPalette
 ) : View(context) {
 
     private var done = false
@@ -1203,6 +1262,16 @@ class StepBadgeView(
         typeface = Typeface.DEFAULT_BOLD
     }
     private val path = Path()
+
+    init {
+        setWillNotDraw(false)
+        setBackgroundColor(Color.TRANSPARENT)
+    }
+
+    fun updatePalette(newPal: GlassPalette) {
+        pal = newPal
+        invalidate()
+    }
 
     fun setState(done: Boolean, current: Boolean) {
         this.done = done
@@ -1252,13 +1321,15 @@ class StatusCheckView(
     context: Context,
     title: String,
     iconType: VectorType,
-    private val pal: GlassPalette
+    private var pal: GlassPalette
 ) : LinearLayout(context) {
 
     private val d = resources.displayMetrics.density
-    private val iconView = VectorIconView(context, iconType, pal.textMuted, 15f * d)
+    private val iconSize = (15f * d).toInt()
+    private val iconView = VectorIconView(context, iconType, pal.textMuted, iconSize.toFloat())
     private val label = TextView(context)
     private val pillBg = GradientDrawable()
+    private var checkedState = false
 
     init {
         orientation = HORIZONTAL
@@ -1268,7 +1339,7 @@ class StatusCheckView(
         pillBg.cornerRadius = 14 * d
         background = pillBg
 
-        val lp = LayoutParams((15f * d).toInt(), (15f * d).toInt()).apply {
+        val lp = LayoutParams(iconSize, iconSize).apply {
             setMargins(0, 0, (7 * d).toInt(), 0)
         }
         iconView.layoutParams = lp
@@ -1284,7 +1355,13 @@ class StatusCheckView(
         setChecked(false)
     }
 
+    fun applyPalette(newPal: GlassPalette) {
+        pal = newPal
+        setChecked(checkedState)
+    }
+
     fun setChecked(ok: Boolean) {
+        checkedState = ok
         iconView.iconColor = if (ok) pal.ok else pal.textMuted
         pillBg.setColor(if (ok) withAlpha(pal.ok, 34) else withAlpha(pal.text, 18))
         pillBg.setStroke((1f * d).toInt(), if (ok) withAlpha(pal.ok, 75) else pal.cardStroke)
