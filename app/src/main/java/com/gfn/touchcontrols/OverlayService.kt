@@ -6,11 +6,15 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.app.WallpaperManager
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -19,11 +23,11 @@ import android.hardware.SensorManager
 import android.os.Build
 import android.os.IBinder
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.Surface
 import android.view.View
 import android.view.WindowManager
-import android.widget.Button
 import android.widget.CheckBox
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -31,6 +35,7 @@ import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
+import androidx.core.graphics.ColorUtils
 import kotlin.math.abs
 
 class OverlayService : Service(), SensorEventListener {
@@ -44,6 +49,7 @@ class OverlayService : Service(), SensorEventListener {
 
     private lateinit var wm: WindowManager
     private lateinit var config: ControlConfig
+    private lateinit var appearancePrefs: SharedPreferences
     private lateinit var sensorManager: SensorManager
     private var gyroSensor: Sensor? = null
 
@@ -57,6 +63,11 @@ class OverlayService : Service(), SensorEventListener {
     private var editSizeSeek: SeekBar? = null
     private var editVisibleCheck: CheckBox? = null
 
+    private lateinit var pal: GlassPalette
+    private var themeMode = "dark"
+    private var blurPct = 50
+    private var opacityPct = 45
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -65,6 +76,9 @@ class OverlayService : Service(), SensorEventListener {
         try {
             wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
             config = ControlConfig(this)
+            appearancePrefs = getSharedPreferences("gfn_appearance", Context.MODE_PRIVATE)
+            refreshAppearanceState()
+
             sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
             gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
 
@@ -84,6 +98,110 @@ class OverlayService : Service(), SensorEventListener {
             stopSelf()
         }
     }
+
+    // ------------------------------------------------------------------
+    //  TEMA Y APARIENCIA SINCRONIZADOS CON MAINACTIVITY
+    // ------------------------------------------------------------------
+
+    private fun refreshAppearanceState() {
+        themeMode = appearancePrefs.getString("theme", "dark") ?: "dark"
+        blurPct = appearancePrefs.getInt("blur", 50).coerceIn(0, 100)
+        opacityPct = appearancePrefs.getInt("opacity", 45).coerceIn(15, 70)
+        pal = buildPalette()
+    }
+
+    private fun readWallpaper(): Pair<Int, Boolean>? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1) return null
+        return try {
+            val wc = WallpaperManager.getInstance(this)
+                .getWallpaperColors(WallpaperManager.FLAG_SYSTEM) ?: return null
+            val colors = listOfNotNull(wc.primaryColor, wc.secondaryColor, wc.tertiaryColor)
+                .map { it.toArgb() }
+            if (colors.isEmpty()) return null
+            val hsv = FloatArray(3)
+            val best = colors.maxByOrNull {
+                Color.colorToHSV(it, hsv)
+                hsv[1]
+            } ?: return null
+            val isLight = ColorUtils.calculateLuminance(colors[0]) > 0.55
+            Pair(best, isLight)
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun tuneAccent(c: Int, light: Boolean): Int {
+        val hsv = FloatArray(3)
+        Color.colorToHSV(c, hsv)
+        hsv[1] = hsv[1].coerceIn(0.55f, 1f)
+        hsv[2] = if (light) hsv[2].coerceIn(0.45f, 0.70f) else hsv[2].coerceIn(0.75f, 1f)
+        return Color.HSVToColor(hsv)
+    }
+
+    private fun withAlpha(c: Int, a: Int): Int =
+        Color.argb(a.coerceIn(0, 255), Color.red(c), Color.green(c), Color.blue(c))
+
+    private fun buildPalette(): GlassPalette {
+        var light = false
+        var accent = Color.parseColor("#FF3B5C")
+        when (themeMode) {
+            "light" -> {
+                light = true
+                accent = Color.parseColor("#C81E3A")
+            }
+            "wallpaper" -> {
+                val wp = readWallpaper()
+                if (wp != null) {
+                    light = wp.second
+                    accent = tuneAccent(wp.first, light)
+                }
+            }
+        }
+
+        val base = if (light) Color.rgb(244, 246, 250) else Color.rgb(18, 20, 26)
+        val surfaceTone = if (light) Color.rgb(255, 255, 255) else Color.rgb(28, 31, 40)
+        val panelTone = if (light) Color.rgb(248, 250, 253) else Color.rgb(22, 25, 33)
+        val fillAlpha = (opacityPct / 100f * 255f).toInt()
+        val panelAlpha = (195 + (opacityPct - 15) * 60 / 55).coerceIn(195, 252)
+        val scrimAlpha = if (themeMode == "wallpaper") {
+            if (light) 115 else 75
+        } else {
+            if (light) 165 else 95
+        }
+
+        return GlassPalette(
+            isLight = light,
+            accent = accent,
+            accentSoft = if (light) accent else ColorUtils.blendARGB(accent, Color.WHITE, 0.22f),
+            accentDark = ColorUtils.blendARGB(accent, Color.BLACK, 0.45f),
+            text = if (light) Color.rgb(18, 20, 26) else Color.rgb(244, 246, 250),
+            textSub = if (light) Color.rgb(55, 62, 75) else Color.rgb(182, 188, 204),
+            textMuted = if (light) Color.rgb(95, 103, 120) else Color.rgb(132, 139, 156),
+            cardFill = withAlpha(surfaceTone, fillAlpha),
+            cardStroke = if (light) Color.argb(28, 18, 20, 26) else Color.argb(34, 255, 255, 255),
+            panelFill = withAlpha(panelTone, panelAlpha),
+            scrim = withAlpha(base, scrimAlpha),
+            ok = if (light) Color.rgb(26, 128, 68) else Color.rgb(74, 204, 122)
+        )
+    }
+
+    private fun applyPanelBlur(params: WindowManager.LayoutParams) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val enabled = try {
+                wm.isCrossWindowBlurEnabled
+            } catch (_: Throwable) {
+                false
+            }
+            if (enabled) {
+                params.flags = params.flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
+                params.blurBehindRadius = (blurPct / 100f * 36f * resources.displayMetrics.density).toInt()
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  SERVICIO Y OVERLAY
+    // ------------------------------------------------------------------
 
     private fun startForegroundNotif() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -164,6 +282,7 @@ class OverlayService : Service(), SensorEventListener {
             text = "≡ HUD"
             textSize = 11.5f
             setTextColor(Color.WHITE)
+            setTypeface(null, Typeface.BOLD)
             gravity = Gravity.CENTER
             setPadding(
                 (12 * density).toInt(),
@@ -171,11 +290,10 @@ class OverlayService : Service(), SensorEventListener {
                 (12 * density).toInt(),
                 (7 * density).toInt()
             )
-            // Liquid Glass tab
             background = GradientDrawable().apply {
-                setColor(Color.argb(140, 24, 20, 38))
+                setColor(withAlpha(pal.accent, 210))
                 cornerRadius = 16 * density
-                setStroke((1.2f * density).toInt(), Color.argb(160, 255, 255, 255))
+                setStroke((1.2f * density).toInt(), Color.argb(140, 255, 255, 255))
             }
             alpha = config.tabAlpha
         }
@@ -243,18 +361,23 @@ class OverlayService : Service(), SensorEventListener {
         config.save()
     }
 
+    private fun reopenControlCenter() {
+        closeControlCenter()
+        openControlCenter()
+    }
+
     private fun openControlCenter() {
+        refreshAppearanceState()
         val d = resources.displayMetrics.density
         val pad = (14 * d).toInt()
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(pad, pad, pad, pad)
-            // Fondo Liquid Glass estilo BitChord
             background = GradientDrawable().apply {
-                setColor(Color.argb(230, 20, 16, 32))
-                cornerRadius = 20 * d
-                setStroke((1.5f * d).toInt(), Color.argb(120, 255, 255, 255))
+                setColor(pal.panelFill)
+                cornerRadius = 22 * d
+                setStroke((1.2f * d).toInt(), pal.cardStroke)
             }
         }
 
@@ -265,14 +388,12 @@ class OverlayService : Service(), SensorEventListener {
         val title = TextView(this).apply {
             text = "Centro de Control"
             textSize = 16f
-            setTextColor(Color.WHITE)
-            setTypeface(null, android.graphics.Typeface.BOLD)
+            setTextColor(pal.text)
+            setTypeface(null, Typeface.BOLD)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
-        val btnClose = Button(this).apply {
-            text = "Cerrar"
-            textSize = 12f
-            setOnClickListener { closeControlCenter() }
+        val btnClose = createChipButton("Cerrar", pal.accentDark, Color.WHITE, d) {
+            closeControlCenter()
         }
         header.addView(title)
         header.addView(btnClose)
@@ -286,45 +407,126 @@ class OverlayService : Service(), SensorEventListener {
         }
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, (6 * d).toInt(), 0, (10 * d).toInt())
+            setPadding(0, (8 * d).toInt(), 0, (12 * d).toInt())
         }
 
-        val quickRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val btnPause = Button(this).apply {
-            text = if (hudPaused) "Mostrar HUD" else "Modo Cursor"
-            textSize = 11f
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            setOnClickListener {
-                hudPaused = !hudPaused
-                hudView?.visibility = if (hudPaused) View.GONE else View.VISIBLE
-                if (hudPaused) VirtualHidController.releaseAll()
-                text = if (hudPaused) "Mostrar HUD" else "Modo Cursor"
-            }
+        val quickRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, (4 * d).toInt(), 0, (4 * d).toInt())
         }
-        val btnEdit = Button(this).apply {
-            val ed = hudView?.editMode == true
-            text = if (ed) "Listo (Guardar)" else "Mover Botones"
-            textSize = 11f
+
+        lateinit var btnPause: TextView
+        lateinit var btnEdit: TextView
+
+        btnPause = createChipButton(
+            text = if (hudPaused) "Mostrar HUD" else "Modo Cursor",
+            bgColor = if (hudPaused) pal.accent else withAlpha(pal.text, 24),
+            textColor = if (hudPaused) Color.WHITE else pal.text,
+            d = d
+        ) {
+            hudPaused = !hudPaused
+            hudView?.visibility = if (hudPaused) View.GONE else View.VISIBLE
+            if (hudPaused) VirtualHidController.releaseAll()
+            btnPause.text = if (hudPaused) "Mostrar HUD" else "Modo Cursor"
+            (btnPause.background as? GradientDrawable)?.setColor(
+                if (hudPaused) pal.accent else withAlpha(pal.text, 24)
+            )
+            btnPause.setTextColor(if (hudPaused) Color.WHITE else pal.text)
+        }.apply {
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            setOnClickListener {
-                val hv = hudView ?: return@setOnClickListener
-                hv.editMode = !hv.editMode
-                if (hv.editMode && hudPaused) {
-                    hudPaused = false
-                    hv.visibility = View.VISIBLE
-                    btnPause.text = "Modo Cursor"
-                }
-                text = if (hv.editMode) "Listo (Guardar)" else "Mover Botones"
-                if (!hv.editMode) config.save()
-            }
+                .apply { rightMargin = (4 * d).toInt() }
         }
+
+        val editingNow = hudView?.editMode == true
+        btnEdit = createChipButton(
+            text = if (editingNow) "Listo (Guardar)" else "Mover Botones",
+            bgColor = if (editingNow) pal.accent else withAlpha(pal.text, 24),
+            textColor = if (editingNow) Color.WHITE else pal.text,
+            d = d
+        ) {
+            val hv = hudView ?: return@createChipButton
+            hv.editMode = !hv.editMode
+            if (hv.editMode && hudPaused) {
+                hudPaused = false
+                hv.visibility = View.VISIBLE
+                btnPause.text = "Modo Cursor"
+                (btnPause.background as? GradientDrawable)?.setColor(withAlpha(pal.text, 24))
+                btnPause.setTextColor(pal.text)
+            }
+            val activeEdit = hv.editMode
+            btnEdit.text = if (activeEdit) "Listo (Guardar)" else "Mover Botones"
+            (btnEdit.background as? GradientDrawable)?.setColor(
+                if (activeEdit) pal.accent else withAlpha(pal.text, 24)
+            )
+            btnEdit.setTextColor(if (activeEdit) Color.WHITE else pal.text)
+            if (!activeEdit) config.save()
+        }.apply {
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                .apply { leftMargin = (4 * d).toInt() }
+        }
+
         quickRow.addView(btnPause)
         quickRow.addView(btnEdit)
         body.addView(quickRow)
 
+        // --- TECLAS PERSONALIZADAS (AGREGAR / QUITAR) ---
+        addSectionTitle(body, "Teclas del HUD")
+        val customKeys = HudPresetManager.getCustomKeys(this)
+        val keysActionRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, (2 * d).toInt(), 0, (6 * d).toInt())
+        }
+        val btnAddKey = createChipButton(
+            text = if (customKeys.isNotEmpty()) "+ Agregar tecla (${customKeys.size})" else "+ Agregar tecla",
+            bgColor = pal.accent,
+            textColor = Color.WHITE,
+            d = d
+        ) {
+            showKeyPickerInPanel(d)
+        }.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+        keysActionRow.addView(btnAddKey)
+        body.addView(keysActionRow)
+
+        for (activeKey in customKeys) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding((10 * d).toInt(), (7 * d).toInt(), (10 * d).toInt(), (7 * d).toInt())
+                background = GradientDrawable().apply {
+                    cornerRadius = 12 * d
+                    setColor(withAlpha(pal.accent, 22))
+                    setStroke((1 * d).toInt(), withAlpha(pal.accent, 65))
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = (5 * d).toInt() }
+            }
+            val keyTv = TextView(this).apply {
+                text = activeKey
+                textSize = 12.5f
+                setTextColor(pal.text)
+                setTypeface(null, Typeface.BOLD)
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            val btnRemove = createChipButton("Quitar", pal.accentDark, Color.WHITE, d) {
+                HudPresetManager.removeCustomKey(this@OverlayService, activeKey)
+                reopenControlCenter()
+            }
+            row.addView(keyTv)
+            row.addView(btnRemove)
+            body.addView(row)
+        }
+
         addSectionTitle(body, "Botón seleccionado (tocá uno en Modo Mover)")
         val lblTarget = TextView(this).apply {
-            setTextColor(Color.parseColor("#E0AAFF"))
+            setTextColor(pal.accentSoft)
+            setTypeface(null, Typeface.BOLD)
             textSize = 13f
         }
         editTargetLabel = lblTarget
@@ -332,7 +534,8 @@ class OverlayService : Service(), SensorEventListener {
 
         val chkVis = CheckBox(this).apply {
             text = "Mostrar en pantalla"
-            setTextColor(Color.WHITE)
+            setTextColor(pal.text)
+            buttonTintList = ColorStateList.valueOf(pal.accent)
             setOnCheckedChangeListener { _, checked ->
                 val id = hudView?.selectedEditId ?: return@setOnCheckedChangeListener
                 config.items[id]?.visible = checked
@@ -357,8 +560,9 @@ class OverlayService : Service(), SensorEventListener {
             if (id == ControlId.JOYSTICK) continue
             val cb = CheckBox(this).apply {
                 text = "${id.title} (${id.badge})"
-                setTextColor(Color.LTGRAY)
+                setTextColor(pal.textSub)
                 textSize = 12f
+                buttonTintList = ColorStateList.valueOf(pal.accent)
                 isChecked = config.items[id]?.visible == true
                 setOnCheckedChangeListener { _, isChecked ->
                     config.items[id]?.visible = isChecked
@@ -430,23 +634,36 @@ class OverlayService : Service(), SensorEventListener {
             config.save()
         }
 
-        val btnReset = Button(this).apply {
-            text = "Restablecer posiciones por defecto"
-            textSize = 12f
-            setOnClickListener {
-                config.resetDefaults()
-                hudView?.invalidate()
-                tabView?.alpha = config.tabAlpha
-                closeControlCenter()
-            }
+        val btnReset = createChipButton(
+            text = "Restablecer posiciones por defecto",
+            bgColor = withAlpha(pal.text, 24),
+            textColor = pal.text,
+            d = d
+        ) {
+            config.resetDefaults()
+            hudView?.invalidate()
+            tabView?.alpha = config.tabAlpha
+            closeControlCenter()
+        }.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = (10 * d).toInt() }
         }
         body.addView(btnReset)
 
-        val btnStop = Button(this).apply {
-            text = "Cerrar Overlay completamente"
-            setTextColor(Color.parseColor("#FF6E40"))
-            textSize = 12f
-            setOnClickListener { stopSelf() }
+        val btnStop = createChipButton(
+            text = "Cerrar Overlay completamente",
+            bgColor = pal.accentDark,
+            textColor = Color.WHITE,
+            d = d
+        ) {
+            stopSelf()
+        }.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = (6 * d).toInt() }
         }
         body.addView(btnStop)
 
@@ -459,8 +676,115 @@ class OverlayService : Service(), SensorEventListener {
             gravity = Gravity.CENTER_VERTICAL or Gravity.START
             x = (16 * d).toInt()
         }
+        applyPanelBlur(params)
         wm.addView(root, params)
         panelView = root
+    }
+
+    private fun showKeyPickerInPanel(d: Float) {
+        val existing = HudPresetManager.getCustomKeys(this)
+        val candidates = HudPresetManager.availableExtraKeys.filter { !existing.contains(it) }
+
+        val picker = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding((14 * d).toInt(), (14 * d).toInt(), (14 * d).toInt(), (14 * d).toInt())
+            background = GradientDrawable().apply {
+                setColor(pal.panelFill)
+                cornerRadius = 20 * d
+                setStroke((1.2f * d).toInt(), pal.cardStroke)
+            }
+        }
+
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val title = TextView(this).apply {
+            text = "Elegir tecla"
+            textSize = 15f
+            setTextColor(pal.text)
+            setTypeface(null, Typeface.BOLD)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val btnBack = createChipButton("Volver", withAlpha(pal.text, 24), pal.text, d) {
+            reopenControlCenter()
+        }
+        header.addView(title)
+        header.addView(btnBack)
+        picker.addView(header)
+
+        val sc = ScrollView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                (resources.displayMetrics.heightPixels * 0.55f).toInt()
+            ).apply { topMargin = (8 * d).toInt() }
+        }
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+
+        for (keyName in candidates) {
+            val item = createChipButton(keyName, withAlpha(pal.text, 18), pal.text, d) {
+                HudPresetManager.addCustomKey(this@OverlayService, keyName)
+                reopenControlCenter()
+            }.apply {
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = (6 * d).toInt() }
+            }
+            box.addView(item)
+        }
+
+        sc.addView(box)
+        picker.addView(sc)
+
+        closeControlCenter()
+        val panelW = (resources.displayMetrics.widthPixels * 0.42f).toInt()
+            .coerceIn((260 * d).toInt(), (360 * d).toInt())
+        val params = baseLayoutParams(panelW, WindowManager.LayoutParams.WRAP_CONTENT).apply {
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            x = (16 * d).toInt()
+        }
+        applyPanelBlur(params)
+        wm.addView(picker, params)
+        panelView = picker
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private fun createChipButton(
+        text: String,
+        bgColor: Int,
+        textColor: Int,
+        d: Float,
+        onClick: () -> Unit
+    ): TextView {
+        return TextView(this).apply {
+            this.text = text
+            textSize = 11.5f
+            gravity = Gravity.CENTER
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(textColor)
+            setPadding((12 * d).toInt(), (8 * d).toInt(), (12 * d).toInt(), (8 * d).toInt())
+            background = GradientDrawable().apply {
+                cornerRadius = 12 * d
+                setColor(bgColor)
+                setStroke((1 * d).toInt(), pal.cardStroke)
+            }
+            isClickable = true
+            setOnTouchListener { view, ev ->
+                when (ev.action) {
+                    MotionEvent.ACTION_DOWN ->
+                        view.animate().scaleX(0.97f).scaleY(0.97f).setDuration(80).start()
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
+                        view.animate().scaleX(1f).scaleY(1f).setDuration(120).start()
+                }
+                false
+            }
+            setOnClickListener {
+                it.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                onClick()
+            }
+        }
     }
 
     private fun syncEditPanelSelection(id: ControlId) {
@@ -474,9 +798,9 @@ class OverlayService : Service(), SensorEventListener {
         val d = resources.displayMetrics.density
         val tv = TextView(this).apply {
             this.text = text
-            textSize = 13f
-            setTextColor(Color.parseColor("#C77DFF"))
-            setTypeface(null, android.graphics.Typeface.BOLD)
+            textSize = 12.5f
+            setTextColor(pal.accentSoft)
+            setTypeface(null, Typeface.BOLD)
             setPadding(0, (12 * d).toInt(), 0, (4 * d).toInt())
         }
         parent.addView(tv)
@@ -491,10 +815,17 @@ class OverlayService : Service(), SensorEventListener {
         @SuppressLint("UseSwitchCompatOrMaterialCode")
         val sw = Switch(this).apply {
             text = label
-            setTextColor(Color.WHITE)
+            setTextColor(pal.text)
             textSize = 12.5f
             isChecked = initial
             setOnCheckedChangeListener { _, checked -> onChange(checked) }
+            val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
+            val offThumb = if (pal.isLight) Color.rgb(176, 176, 176) else Color.rgb(136, 136, 136)
+            thumbTintList = ColorStateList(states, intArrayOf(pal.accent, offThumb))
+            trackTintList = ColorStateList(
+                states,
+                intArrayOf(withAlpha(pal.accent, 110), withAlpha(pal.text, 60))
+            )
         }
         parent.addView(sw)
     }
@@ -509,12 +840,15 @@ class OverlayService : Service(), SensorEventListener {
     ): SeekBar {
         val tv = TextView(this).apply {
             text = "$label: $initial"
-            setTextColor(Color.LTGRAY)
+            setTextColor(pal.textSub)
             textSize = 12f
         }
         val sb = SeekBar(this).apply {
             max = maxVal - minVal
             progress = (initial - minVal).coerceIn(0, max)
+            val tint = ColorStateList.valueOf(pal.accent)
+            progressTintList = tint
+            thumbTintList = tint
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
                     val v = p + minVal
