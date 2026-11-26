@@ -633,7 +633,6 @@ class MainActivity : AppCompatActivity() {
     private fun rebuildPresetRow(d: Float) {
         if (!::presetRow.isInitialized) return
         presetRow.removeAllViews()
-        val config = ControlConfig(this)
         val active = HudPresetManager.getActivePreset(this)
         val customCount = HudPresetManager.getCustomKeys(this).size
 
@@ -659,11 +658,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         val pillShooter = makePill("Shooter", active == "shooter") {
-            HudPresetManager.applyPreset(this, "shooter", config)
+            HudPresetManager.applyPreset(this, "shooter")
             applyAppearanceLive()
         }
         val pillAdventure = makePill("Aventura", active == "adventure") {
-            HudPresetManager.applyPreset(this, "adventure", config)
+            HudPresetManager.applyPreset(this, "adventure")
             applyAppearanceLive()
         }
         val keyText = if (customCount > 0) "+ Tecla ($customCount)" else "+ Tecla"
@@ -693,7 +692,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         val title = TextView(this).apply {
-            text = "Agregar tecla al HUD"
+            text = "Teclas del HUD"
             textSize = 16f
             setTextColor(pal.text)
             setTypeface(null, Typeface.BOLD)
@@ -708,6 +707,51 @@ class MainActivity : AppCompatActivity() {
             )
         }
         val listBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+
+        val currentKeys = HudPresetManager.getCustomKeys(this)
+        if (currentKeys.isNotEmpty()) {
+            val activeHeader = TextView(this).apply {
+                text = "Agregadas (tocá para quitar)"
+                textSize = 12f
+                setTextColor(pal.accentSoft)
+                setTypeface(null, Typeface.BOLD)
+                setPadding(0, (4 * d).toInt(), 0, (6 * d).toInt())
+            }
+            listBox.addView(activeHeader)
+
+            for (activeKey in currentKeys) {
+                val rowItem = TextView(this).apply {
+                    text = "✕  $activeKey"
+                    textSize = 13f
+                    setTextColor(pal.text)
+                    setPadding((12 * d).toInt(), (10 * d).toInt(), (12 * d).toInt(), (10 * d).toInt())
+                    background = GradientDrawable().apply {
+                        cornerRadius = 12 * d
+                        setColor(withAlpha(pal.accent, 24))
+                        setStroke((1 * d).toInt(), withAlpha(pal.accent, 70))
+                    }
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply { bottomMargin = (6 * d).toInt() }
+                    makeClickable(this) {
+                        HudPresetManager.removeCustomKey(this@MainActivity, activeKey)
+                        dialog.dismiss()
+                        applyAppearanceLive()
+                    }
+                }
+                listBox.addView(rowItem)
+            }
+        }
+
+        val availHeader = TextView(this).apply {
+            text = "Disponibles para agregar"
+            textSize = 12f
+            setTextColor(pal.textSub)
+            setTypeface(null, Typeface.BOLD)
+            setPadding(0, (8 * d).toInt(), 0, (6 * d).toInt())
+        }
+        listBox.addView(availHeader)
 
         for (keyName in HudPresetManager.availableExtraKeys) {
             val item = TextView(this).apply {
