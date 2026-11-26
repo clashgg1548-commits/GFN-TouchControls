@@ -1,4 +1,4 @@
-package com.gfn.touchcontrols
+Package com.gfn.touchcontrols
 
 import android.Manifest
 import android.animation.ValueAnimator
@@ -553,11 +553,11 @@ class MainActivity : AppCompatActivity() {
 
         footerFrameBg = createEdgeShadedBg(12 * d, withAlpha(pal.cardFill, 140), Color.TRANSPARENT)
         footerFrame = TextView(this).apply {
-            text = "GFN TOUCH CONTROLS"
+            text = "GFN TOUCH CONTROLS · BY DVONE"
             textSize = 10f
             setTextColor(pal.textSub)
             setTypeface(null, Typeface.BOLD)
-            letterSpacing = 0.20f
+            letterSpacing = 0.16f
             gravity = Gravity.CENTER
             setPadding((16 * d).toInt(), (7 * d).toInt(), (16 * d).toInt(), (7 * d).toInt())
             background = footerFrameBg
