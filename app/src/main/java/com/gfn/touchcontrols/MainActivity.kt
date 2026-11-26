@@ -62,6 +62,7 @@ class MainActivity : AppCompatActivity() {
     private var opacityPct = 45         // 15..70
     private lateinit var pal: GlassPalette
     private var settingsDialog: Dialog? = null
+    private lateinit var shizukuBridge: ShizukuBridge
 
     private lateinit var outerContainer: LinearLayout
     private lateinit var rootLayout: LinearLayout
@@ -81,8 +82,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var checkShizukuPerm: StatusCheckView
     private lateinit var checkMouse: StatusCheckView
     private lateinit var tvGfnSub: TextView
-
-    private lateinit var presetRow: LinearLayout
 
     private lateinit var sectionLabel: TextView
     private lateinit var stepOverlay: StepRefs
@@ -118,6 +117,12 @@ class MainActivity : AppCompatActivity() {
         window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
 
         buildUi()
+
+        shizukuBridge = ShizukuBridge(this) {
+            runOnUiThread { refreshStatus() }
+        }
+        shizukuBridge.start()
+        refreshStatus()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
@@ -272,8 +277,6 @@ class MainActivity : AppCompatActivity() {
         checkShizukuAlive.applyPalette(pal)
         checkShizukuPerm.applyPalette(pal)
         checkMouse.applyPalette(pal)
-
-        rebuildPresetRow(d)
 
         sectionLabel.setTextColor(pal.textMuted)
 
@@ -441,18 +444,6 @@ class MainActivity : AppCompatActivity() {
         )
         rootLayout.addView(heroCard)
 
-        // --- PÍLDORAS DE PRESETS Y TECLAS PERSONALIZADAS ---
-        presetRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = (10 * d).toInt() }
-        }
-        rebuildPresetRow(d)
-        rootLayout.addView(presetRow)
-
         rootLayout.addView(space(16 * d))
 
         // --- 3. PASOS NUMERADOS ---
@@ -473,8 +464,8 @@ class MainActivity : AppCompatActivity() {
             } catch (_: Throwable) {
             }
         }
-        stepShizuku = createStepCard(d, 2, "Conectar Shizuku", "Módulo separado (ShizukuBridge)") {
-            refreshStatus()
+        stepShizuku = createStepCard(d, 2, "Conectar Shizuku", "Ratón virtual (uinput)") {
+            shizukuBridge.connectOrRequestPermission(1001)
         }
         stepHud = createStepCard(d, 3, "Iniciar HUD", "Activar controles") {
             toggleOverlay()
@@ -616,158 +607,6 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Throwable) {
             playSub.text = "GFN no instalado"
         }
-    }
-
-    private fun rebuildPresetRow(d: Float) {
-        if (!::presetRow.isInitialized) return
-        presetRow.removeAllViews()
-        val active = HudPresetManager.getActivePreset(this)
-        val customCount = HudPresetManager.getCustomKeys(this).size
-
-        fun makePill(label: String, selected: Boolean, onTap: () -> Unit): TextView {
-            return TextView(this).apply {
-                text = label
-                textSize = 11.5f
-                gravity = Gravity.CENTER
-                setTypeface(null, Typeface.BOLD)
-                maxLines = 1
-                ellipsize = TextUtils.TruncateAt.END
-                setTextColor(if (selected) Color.WHITE else pal.textSub)
-                setPadding((10 * d).toInt(), (8 * d).toInt(), (10 * d).toInt(), (8 * d).toInt())
-                background = GradientDrawable().apply {
-                    cornerRadius = 14 * d
-                    setColor(if (selected) pal.accent else withAlpha(pal.text, 18))
-                    setStroke((1 * d).toInt(), if (selected) pal.accent else pal.cardStroke)
-                }
-                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-                    .apply { setMargins((3 * d).toInt(), 0, (3 * d).toInt(), 0) }
-                makeClickable(this, onTap)
-            }
-        }
-
-        val pillShooter = makePill("Shooter", active == "shooter") {
-            HudPresetManager.applyPreset(this, "shooter")
-            applyAppearanceLive()
-        }
-        val pillAdventure = makePill("Aventura", active == "adventure") {
-            HudPresetManager.applyPreset(this, "adventure")
-            applyAppearanceLive()
-        }
-        val keyText = if (customCount > 0) "+ Tecla ($customCount)" else "+ Tecla"
-        val pillAddKey = makePill(keyText, false) {
-            showAddKeyDialog(d)
-        }
-
-        presetRow.addView(pillShooter)
-        presetRow.addView(pillAdventure)
-        presetRow.addView(pillAddKey)
-    }
-
-    private fun showAddKeyDialog(d: Float) {
-        val dialog = Dialog(this)
-        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-        dialog.window?.setDimAmount(0.55f)
-
-        val pad = (16 * d).toInt()
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(pad, pad, pad, pad)
-            background = GradientDrawable().apply {
-                setColor(pal.panelFill)
-                cornerRadius = 22 * d
-                setStroke((1 * d).toInt(), pal.cardStroke)
-            }
-        }
-
-        val title = TextView(this).apply {
-            text = "Teclas del HUD"
-            textSize = 16f
-            setTextColor(pal.text)
-            setTypeface(null, Typeface.BOLD)
-            setPadding(0, 0, 0, (10 * d).toInt())
-        }
-        container.addView(title)
-
-        val scroll = ScrollView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                (resources.displayMetrics.widthPixels * 0.82f).toInt(),
-                (resources.displayMetrics.heightPixels * 0.50f).toInt()
-            )
-        }
-        val listBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-
-        val currentKeys = HudPresetManager.getCustomKeys(this)
-        if (currentKeys.isNotEmpty()) {
-            val activeHeader = TextView(this).apply {
-                text = "Agregadas (tocá para quitar)"
-                textSize = 12f
-                setTextColor(pal.accentSoft)
-                setTypeface(null, Typeface.BOLD)
-                setPadding(0, (4 * d).toInt(), 0, (6 * d).toInt())
-            }
-            listBox.addView(activeHeader)
-
-            for (activeKey in currentKeys) {
-                val rowItem = TextView(this).apply {
-                    text = "✕  $activeKey"
-                    textSize = 13f
-                    setTextColor(pal.text)
-                    setPadding((12 * d).toInt(), (10 * d).toInt(), (12 * d).toInt(), (10 * d).toInt())
-                    background = GradientDrawable().apply {
-                        cornerRadius = 12 * d
-                        setColor(withAlpha(pal.accent, 24))
-                        setStroke((1 * d).toInt(), withAlpha(pal.accent, 70))
-                    }
-                    layoutParams = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                    ).apply { bottomMargin = (6 * d).toInt() }
-                    makeClickable(this) {
-                        HudPresetManager.removeCustomKey(this@MainActivity, activeKey)
-                        dialog.dismiss()
-                        applyAppearanceLive()
-                    }
-                }
-                listBox.addView(rowItem)
-            }
-        }
-
-        val availHeader = TextView(this).apply {
-            text = "Disponibles para agregar"
-            textSize = 12f
-            setTextColor(pal.textSub)
-            setTypeface(null, Typeface.BOLD)
-            setPadding(0, (8 * d).toInt(), 0, (6 * d).toInt())
-        }
-        listBox.addView(availHeader)
-
-        for (keyName in HudPresetManager.availableExtraKeys) {
-            val item = TextView(this).apply {
-                text = keyName
-                textSize = 13f
-                setTextColor(pal.text)
-                setPadding((12 * d).toInt(), (11 * d).toInt(), (12 * d).toInt(), (11 * d).toInt())
-                background = GradientDrawable().apply {
-                    cornerRadius = 12 * d
-                    setColor(withAlpha(pal.text, 16))
-                }
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { bottomMargin = (6 * d).toInt() }
-                makeClickable(this) {
-                    HudPresetManager.addCustomKey(this@MainActivity, keyName)
-                    dialog.dismiss()
-                    applyAppearanceLive()
-                }
-            }
-            listBox.addView(item)
-        }
-
-        scroll.addView(listBox)
-        container.addView(scroll)
-        dialog.setContentView(container)
-        dialog.show()
     }
 
     private fun dp(v: Float) = v * resources.displayMetrics.density
@@ -1174,13 +1013,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refreshStatus() {
-        if (!uiReady) return
+        if (!uiReady || !::shizukuBridge.isInitialized) return
 
         val overlayOk = Settings.canDrawOverlays(this)
-        val shizukuAlive = false
-        val shizukuPerm = false
-        val mouseOk = false
-        val connected = false
+        val shizukuAlive = shizukuBridge.isShizukuAlive()
+        val shizukuPerm = shizukuBridge.hasShizukuPermission()
+        val mouseOk = shizukuBridge.isMouseConnected()
+        val connected = shizukuBridge.isReady()
         val hudRunning = OverlayService.isRunning
 
         checkOverlay.setChecked(overlayOk)
@@ -1188,11 +1027,12 @@ class MainActivity : AppCompatActivity() {
         checkShizukuPerm.setChecked(shizukuPerm)
         checkMouse.setChecked(mouseOk)
 
-        tvGfnSub.text = if (overlayOk) "Overlay listo" else "Esperando..."
-        tvGfnSub.setTextColor(if (overlayOk) pal.ok else pal.textSub)
+        tvGfnSub.text = if (connected) "Conectado" else "Listo para iniciar"
+        tvGfnSub.setTextColor(if (connected) pal.ok else pal.textSub)
 
         val current = when {
             !overlayOk -> 1
+            !connected -> 2
             !hudRunning -> 3
             else -> 0
         }
@@ -1200,14 +1040,19 @@ class MainActivity : AppCompatActivity() {
         applyStepStyle(stepOverlay, overlayOk, current == 1)
         stepOverlay.sub.text = if (overlayOk) "Permiso concedido" else "Mostrar sobre apps"
 
-        applyStepStyle(stepShizuku, connected, false)
-        stepShizuku.sub.text = "Gestionado en ShizukuBridge"
+        applyStepStyle(stepShizuku, connected, current == 2)
+        stepShizuku.sub.text = when {
+            connected -> "Ratón virtual conectado"
+            !shizukuAlive -> "Abre Shizuku y actívalo"
+            !shizukuPerm -> "Toca para dar permiso"
+            else -> "Toca para conectar el ratón"
+        }
 
         applyStepStyle(stepHud, hudRunning, current == 3)
         stepHud.title.text = if (hudRunning) "Detener HUD" else "Iniciar HUD"
         stepHud.sub.text = if (hudRunning) "Cerrar controles" else "Activar controles"
 
-        allReady = overlayOk
+        allReady = current == 0
         if (allReady) {
             playCard.background = playReadyBg
             playIcon.iconColor = Color.WHITE
@@ -1228,6 +1073,9 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         breathingAnimator?.cancel()
         settingsDialog?.dismiss()
+        if (::shizukuBridge.isInitialized) {
+            shizukuBridge.stop()
+        }
         super.onDestroy()
     }
 }
