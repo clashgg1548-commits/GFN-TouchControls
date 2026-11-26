@@ -197,11 +197,15 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val base = if (light) Color.WHITE else Color.rgb(18, 20, 26)
-        val surfaceTone = if (light) Color.WHITE else Color.rgb(28, 31, 40)
-        val panelTone = if (light) Color.rgb(248, 249, 252) else Color.rgb(22, 25, 33)
+        val base = if (light) Color.rgb(244, 246, 250) else Color.rgb(18, 20, 26)
+        val surfaceTone = if (light) Color.rgb(255, 255, 255) else Color.rgb(28, 31, 40)
+        val panelTone = if (light) Color.rgb(250, 251, 253) else Color.rgb(22, 25, 33)
         val fillAlpha = (opacityPct / 100f * 255f).toInt()
-        val scrimAlpha = if (themeMode == "wallpaper") 42 else if (light) 68 else 82
+        val scrimAlpha = if (themeMode == "wallpaper") {
+            if (light) 115 else 75
+        } else {
+            if (light) 165 else 95
+        }
 
         return GlassPalette(
             isLight = light,
@@ -209,13 +213,13 @@ class MainActivity : AppCompatActivity() {
             accentSoft = if (light) accent else ColorUtils.blendARGB(accent, Color.WHITE, 0.22f),
             accentDark = ColorUtils.blendARGB(accent, Color.BLACK, 0.45f),
             text = if (light) Color.rgb(18, 20, 26) else Color.rgb(244, 246, 250),
-            textSub = if (light) Color.rgb(52, 58, 70) else Color.rgb(182, 188, 204),
-            textMuted = if (light) Color.rgb(86, 93, 108) else Color.rgb(132, 139, 156),
+            textSub = if (light) Color.rgb(55, 62, 75) else Color.rgb(182, 188, 204),
+            textMuted = if (light) Color.rgb(95, 103, 120) else Color.rgb(132, 139, 156),
             cardFill = withAlpha(surfaceTone, fillAlpha),
-            cardStroke = if (light) Color.argb(24, 0, 0, 0) else Color.argb(26, 255, 255, 255),
-            panelFill = withAlpha(panelTone, 244),
+            cardStroke = if (light) Color.argb(26, 18, 20, 26) else Color.argb(28, 255, 255, 255),
+            panelFill = withAlpha(panelTone, 248),
             scrim = withAlpha(base, scrimAlpha),
-            ok = if (light) Color.rgb(34, 139, 78) else Color.rgb(74, 204, 122)
+            ok = if (light) Color.rgb(26, 128, 68) else Color.rgb(74, 204, 122)
         )
     }
 
@@ -255,7 +259,6 @@ class MainActivity : AppCompatActivity() {
         c.isAppearanceLightNavigationBars = pal.isLight
     }
 
-    // Actualiza en vivo sin destruir el layout ni mover la posición
     private fun applyAppearanceLive() {
         saveAppearance()
         pal = buildPalette()
@@ -302,12 +305,20 @@ class MainActivity : AppCompatActivity() {
 
     private fun applyInsetsPadding() {
         val d = resources.displayMetrics.density
+        val padH = (18 * d).toInt()
         val fallbackTop = resources.getIdentifier("status_bar_height", "dimen", "android")
             .takeIf { it > 0 }
             ?.let { resources.getDimensionPixelSize(it) }
             ?: (28 * d).toInt()
         val safeTop = maxOf(topInsetPx, fallbackTop)
-        outerContainer.setPadding(0, safeTop + (8 * d).toInt(), 0, maxOf(bottomInsetPx, (10 * d).toInt()))
+        val safeBottom = maxOf(bottomInsetPx, (12 * d).toInt())
+        outerContainer.setPadding(0, 0, 0, 0)
+        rootLayout.setPadding(
+            padH,
+            safeTop + (12 * d).toInt(),
+            padH,
+            safeBottom + (12 * d).toInt()
+        )
     }
 
     // ------------------------------------------------------------------
