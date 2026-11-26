@@ -7,6 +7,7 @@ import android.app.Dialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -32,6 +33,8 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import rikka.shizuku.Shizuku
 import kotlin.math.cos
 import kotlin.math.sin
@@ -184,16 +187,22 @@ class MainActivity : AppCompatActivity() {
 
         root.addView(space(16 * d))
 
-        // --- 3. ACCIONES EN CUADRÍCULA 2x2 (INTERCALADAS PARA APROVECHAR LA PANTALLA) ---
+        // --- 3. ACCIONES EN CUADRÍCULA 2x2 ---
         val gridContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
         }
 
         // Fila 1: Permisos Overlay + Conectar Shizuku
         val row1 = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
         }
 
         val cardOverlay = createGridCard(
@@ -227,7 +236,10 @@ class MainActivity : AppCompatActivity() {
         val row2 = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, (12 * d).toInt(), 0, 0)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
         }
 
         val cardHud = createGridCard(
@@ -304,6 +316,13 @@ class MainActivity : AppCompatActivity() {
         }
         setContentView(scroll)
 
+        // ARREGLO 1: respetar la barra de estado (hora, batería) y la barra de navegación
+        ViewCompat.setOnApplyWindowInsetsListener(scroll) { v, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPadding(0, bars.top, 0, bars.bottom)
+            insets
+        }
+
         startBreathingAnimation()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -349,6 +368,9 @@ class MainActivity : AppCompatActivity() {
         val btnClose = Button(this).apply {
             text = "Cerrar"
             textSize = 12f
+            // ARREGLO 3: botón rojo
+            backgroundTintList = ColorStateList.valueOf(Color.parseColor("#8E0016"))
+            setTextColor(Color.WHITE)
             setOnClickListener { dialog.dismiss() }
         }
         header.addView(title)
@@ -388,6 +410,9 @@ class MainActivity : AppCompatActivity() {
         val btnReset = Button(this).apply {
             text = "Restablecer valores por defecto"
             textSize = 12f
+            // ARREGLO 3: botón rojo
+            backgroundTintList = ColorStateList.valueOf(Color.parseColor("#8E0016"))
+            setTextColor(Color.WHITE)
             setOnClickListener {
                 config.resetDefaults()
                 dialog.dismiss()
@@ -420,6 +445,16 @@ class MainActivity : AppCompatActivity() {
             textSize = 12.5f
             isChecked = initial
             setOnCheckedChangeListener { _, checked -> onChange(checked) }
+            // ARREGLO 3: interruptor rojo
+            val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
+            thumbTintList = ColorStateList(
+                states,
+                intArrayOf(Color.parseColor("#FF2A4D"), Color.parseColor("#888888"))
+            )
+            trackTintList = ColorStateList(
+                states,
+                intArrayOf(Color.parseColor("#66FF2A4D"), Color.parseColor("#44FFFFFF"))
+            )
         }
         parent.addView(sw)
     }
@@ -433,6 +468,10 @@ class MainActivity : AppCompatActivity() {
         val sb = SeekBar(this).apply {
             max = maxVal - minVal
             progress = (initial - minVal).coerceIn(0, max)
+            // ARREGLO 3: slider rojo
+            val red = ColorStateList.valueOf(Color.parseColor("#FF2A4D"))
+            progressTintList = red
+            thumbTintList = red
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
                     val v = p + minVal
@@ -489,7 +528,8 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding((14 * d).toInt(), (16 * d).toInt(), (14 * d).toInt(), (14 * d).toInt())
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, weight)
+            // ARREGLO 2: altura fija de 120 en vez de estirarse por toda la pantalla
+            layoutParams = LinearLayout.LayoutParams(0, (120 * d).toInt(), weight)
             background = createCardBg(16 * d, Color.parseColor("#150E12"), Color.parseColor("#3D161F"), true)
 
             val topRow = LinearLayout(context).apply {
@@ -541,7 +581,8 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding((14 * d).toInt(), (16 * d).toInt(), (14 * d).toInt(), (14 * d).toInt())
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, weight)
+            // ARREGLO 2: altura fija de 120
+            layoutParams = LinearLayout.LayoutParams(0, (120 * d).toInt(), weight)
             background = GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
                 intArrayOf(Color.parseColor("#D50024"), Color.parseColor("#8E0016"), Color.parseColor("#4A020C"))
@@ -839,7 +880,6 @@ class StatusCheckView(context: Context, title: String) : LinearLayout(context) {
     }
 
     fun setChecked(ok: Boolean) {
-        val d = resources.displayMetrics.density
         dotView.background = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             setColor(if (ok) Color.parseColor("#4CAF50") else Color.parseColor("#5A6070"))
@@ -847,3 +887,4 @@ class StatusCheckView(context: Context, title: String) : LinearLayout(context) {
         label.setTextColor(if (ok) Color.parseColor("#E0E4F0") else Color.parseColor("#7A8090"))
     }
 }
+ 
