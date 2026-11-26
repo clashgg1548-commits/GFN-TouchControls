@@ -30,7 +30,6 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewOutlineProvider
-import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -191,11 +190,10 @@ class MainActivity : AppCompatActivity() {
             accent = accent,
             accentSoft = if (light) accent else ColorUtils.blendARGB(accent, Color.WHITE, 0.22f),
             accentDark = ColorUtils.blendARGB(accent, Color.BLACK, 0.45f),
-            text = if (light) Color.rgb(20, 22, 28) else Color.rgb(244, 246, 250),
-            textSub = if (light) Color.rgb(75, 82, 96) else Color.rgb(182, 188, 204),
-            textMuted = if (light) Color.rgb(115, 122, 136) else Color.rgb(132, 139, 156),
+            text = if (light) Color.rgb(18, 20, 26) else Color.rgb(244, 246, 250),
+            textSub = if (light) Color.rgb(52, 58, 70) else Color.rgb(182, 188, 204),
+            textMuted = if (light) Color.rgb(86, 93, 108) else Color.rgb(132, 139, 156),
             cardFill = withAlpha(surfaceTone, fillAlpha),
-            // Sombreado leve en el borde (hilo muy sutil)
             cardStroke = if (light) Color.argb(28, 0, 0, 0) else Color.argb(32, 255, 255, 255),
             panelFill = withAlpha(panelTone, 244),
             scrim = withAlpha(base, scrimAlpha),
@@ -266,15 +264,15 @@ class MainActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(padH, (18 * d).toInt(), padH, (18 * d).toInt())
+            setPadding(padH, (22 * d).toInt(), padH, (18 * d).toInt())
             setBackgroundColor(pal.scrim)
         }
 
-        // --- 1. CABECERA LIMPIA ---
+        // --- 1. CABECERA LIMPIA (con margen extra respecto a la barra superior) ---
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding((2 * d).toInt(), (10 * d).toInt(), (2 * d).toInt(), (20 * d).toInt())
+            setPadding((2 * d).toInt(), (12 * d).toInt(), (2 * d).toInt(), (20 * d).toInt())
         }
 
         val logoBadge = LinearLayout(this).apply {
@@ -521,7 +519,9 @@ class MainActivity : AppCompatActivity() {
 
         ViewCompat.setOnApplyWindowInsetsListener(outerContainer) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(0, bars.top + (6 * d).toInt(), 0, bars.bottom)
+            val cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout())
+            val topInset = maxOf(bars.top, cutout.top)
+            v.setPadding(bars.left, topInset + (10 * d).toInt(), bars.right, bars.bottom)
             insets
         }
 
@@ -628,8 +628,8 @@ class MainActivity : AppCompatActivity() {
         s.badge.setState(done, current)
         when {
             current -> {
-                s.bg.setColor(withAlpha(pal.accent, if (pal.isLight) 24 else 32))
-                s.bg.setStroke((1 * d).toInt(), withAlpha(pal.accent, 65))
+                s.bg.setColor(withAlpha(pal.text, if (pal.isLight) 16 else 20))
+                s.bg.setStroke((1 * d).toInt(), withAlpha(pal.accent, 52))
             }
             done -> {
                 s.bg.setColor(pal.cardFill)
@@ -644,7 +644,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ------------------------------------------------------------------
-    //  AJUSTES (engranaje) - sin que se mezclen las opciones de atrás
+    //  AJUSTES (engranaje)
     // ------------------------------------------------------------------
 
     private fun showSettingsDialog(restoreScroll: Int = 0) {
@@ -868,7 +868,6 @@ class MainActivity : AppCompatActivity() {
     //  UTILIDADES VISUALES
     // ------------------------------------------------------------------
 
-    // Sombreado leve en el borde para dar profundidad sin sobrecargar
     private fun createEdgeShadedBg(
         radius: Float,
         fillColor: Int,
