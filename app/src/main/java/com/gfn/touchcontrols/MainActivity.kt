@@ -182,11 +182,9 @@ class MainActivity : AppCompatActivity() {
 
         val base = if (light) Color.WHITE else Color.rgb(18, 20, 26)
         val surfaceTone = if (light) Color.WHITE else Color.rgb(28, 31, 40)
+        val panelTone = if (light) Color.rgb(248, 249, 252) else Color.rgb(22, 25, 33)
         val fillAlpha = (opacityPct / 100f * 255f).toInt()
-        val panelAlpha = (maxOf(opacityPct + 18, 65).coerceAtMost(85) / 100f * 255f).toInt()
-
-        // Scrim translúcido para que se vea el fondo de pantalla desenfocado detrás
-        val scrimAlpha = if (themeMode == "wallpaper") 45 else if (light) 72 else 88
+        val scrimAlpha = if (themeMode == "wallpaper") 42 else if (light) 68 else 82
 
         return GlassPalette(
             isLight = light,
@@ -197,8 +195,9 @@ class MainActivity : AppCompatActivity() {
             textSub = if (light) Color.rgb(75, 82, 96) else Color.rgb(182, 188, 204),
             textMuted = if (light) Color.rgb(115, 122, 136) else Color.rgb(132, 139, 156),
             cardFill = withAlpha(surfaceTone, fillAlpha),
-            cardStroke = if (light) Color.argb(24, 0, 0, 0) else Color.argb(26, 255, 255, 255),
-            panelFill = withAlpha(surfaceTone, panelAlpha),
+            // Sombreado leve en el borde (hilo muy sutil)
+            cardStroke = if (light) Color.argb(28, 0, 0, 0) else Color.argb(32, 255, 255, 255),
+            panelFill = withAlpha(panelTone, 244),
             scrim = withAlpha(base, scrimAlpha),
             ok = if (light) Color.rgb(34, 139, 78) else Color.rgb(74, 204, 122)
         )
@@ -226,7 +225,7 @@ class MainActivity : AppCompatActivity() {
             }
             try {
                 window.setBackgroundBlurRadius(radius)
-                window.setDimAmount(if (radius > 0) 0.15f else 0.0f)
+                window.setDimAmount(if (radius > 0) 0.14f else 0.0f)
             } catch (_: Throwable) {
             }
         }
@@ -282,7 +281,9 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             val sz = (44 * d).toInt()
             layoutParams = LinearLayout.LayoutParams(sz, sz)
-            background = createUnifiedBlockBg(14 * d, withAlpha(pal.accent, if (pal.isLight) 28 else 36), Color.TRANSPARENT)
+            background = createEdgeShadedBg(14 * d, withAlpha(pal.accent, if (pal.isLight) 28 else 36), withAlpha(pal.accent, 55))
+            outlineProvider = RoundedOutlineProvider(14 * d)
+            elevation = 2 * d
             addView(VectorIconView(context, VectorType.GAMEPAD, pal.accent, dp(24f)))
         }
 
@@ -313,7 +314,7 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             val sz = (42 * d).toInt()
             layoutParams = LinearLayout.LayoutParams(sz, sz)
-            background = createUnifiedBlockBg(14 * d, pal.cardFill, pal.cardStroke)
+            background = createEdgeShadedBg(14 * d, pal.cardFill, pal.cardStroke)
             outlineProvider = RoundedOutlineProvider(14 * d)
             elevation = 3 * d
             addView(VectorIconView(context, VectorType.GEAR, pal.text, dp(20f)))
@@ -325,13 +326,13 @@ class MainActivity : AppCompatActivity() {
         header.addView(btnSettings)
         root.addView(header)
 
-        // --- 2. TARJETA DE ESTADO ("UNA SOLA PIEZA" + SOMBRA LEVE) ---
+        // --- 2. TARJETA DE ESTADO ---
         val heroCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding((18 * d).toInt(), (18 * d).toInt(), (18 * d).toInt(), (16 * d).toInt())
-            background = createUnifiedBlockBg(22 * d, pal.cardFill, pal.cardStroke)
+            background = createEdgeShadedBg(22 * d, pal.cardFill, pal.cardStroke)
             outlineProvider = RoundedOutlineProvider(22 * d)
-            elevation = 6 * d
+            elevation = 5 * d
         }
 
         val heroTop = LinearLayout(this).apply {
@@ -379,7 +380,7 @@ class MainActivity : AppCompatActivity() {
 
         root.addView(space(22 * d))
 
-        // --- 3. PASOS NUMERADOS (BLOQUES INTEGRADOS SIN BORDES ROJOS) ---
+        // --- 3. PASOS NUMERADOS ---
         val sectionLabel = TextView(this).apply {
             text = "CONFIGURACIÓN"
             textSize = 10.5f
@@ -422,7 +423,7 @@ class MainActivity : AppCompatActivity() {
         ).apply {
             cornerRadius = 20 * d
         }
-        playIdleBg = createUnifiedBlockBg(20 * d, pal.cardFill, pal.cardStroke)
+        playIdleBg = createEdgeShadedBg(20 * d, pal.cardFill, pal.cardStroke)
 
         playCard = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -435,7 +436,7 @@ class MainActivity : AppCompatActivity() {
             background = playIdleBg
             outlineProvider = RoundedOutlineProvider(20 * d)
             clipToOutline = false
-            elevation = 6 * d
+            elevation = 5 * d
         }
         playIcon = VectorIconView(this, VectorType.PLAY_ARROW, pal.textMuted, 24 * d)
         val playTextCol = LinearLayout(this).apply {
@@ -490,7 +491,7 @@ class MainActivity : AppCompatActivity() {
             letterSpacing = 0.20f
             gravity = Gravity.CENTER
             setPadding((16 * d).toInt(), (6 * d).toInt(), (16 * d).toInt(), (6 * d).toInt())
-            background = createUnifiedBlockBg(12 * d, withAlpha(pal.cardFill, 140), Color.TRANSPARENT)
+            background = createEdgeShadedBg(12 * d, withAlpha(pal.cardFill, 140), Color.TRANSPARENT)
         }
 
         val footerSub = TextView(this).apply {
@@ -574,7 +575,7 @@ class MainActivity : AppCompatActivity() {
         subtitle: String,
         onClick: () -> Unit
     ): StepRefs {
-        val bg = createUnifiedBlockBg(18 * d, pal.cardFill, pal.cardStroke)
+        val bg = createEdgeShadedBg(18 * d, pal.cardFill, pal.cardStroke)
 
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -586,7 +587,7 @@ class MainActivity : AppCompatActivity() {
             ).apply { bottomMargin = (10 * d).toInt() }
             background = bg
             outlineProvider = RoundedOutlineProvider(18 * d)
-            elevation = 4 * d
+            elevation = 3 * d
         }
 
         val badgeSize = (30 * d).toInt()
@@ -627,7 +628,7 @@ class MainActivity : AppCompatActivity() {
         s.badge.setState(done, current)
         when {
             current -> {
-                s.bg.setColor(withAlpha(pal.accent, if (pal.isLight) 26 else 36))
+                s.bg.setColor(withAlpha(pal.accent, if (pal.isLight) 24 else 32))
                 s.bg.setStroke((1 * d).toInt(), withAlpha(pal.accent, 65))
             }
             done -> {
@@ -643,7 +644,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ------------------------------------------------------------------
-    //  AJUSTES (engranaje)
+    //  AJUSTES (engranaje) - sin que se mezclen las opciones de atrás
     // ------------------------------------------------------------------
 
     private fun showSettingsDialog(restoreScroll: Int = 0) {
@@ -652,7 +653,7 @@ class MainActivity : AppCompatActivity() {
         val dialog = Dialog(this)
         settingsDialog = dialog
         dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-        dialog.window?.setDimAmount(0.25f)
+        dialog.window?.setDimAmount(0.55f)
 
         val pad = (16 * d).toInt()
         val root = LinearLayout(this).apply {
@@ -661,6 +662,7 @@ class MainActivity : AppCompatActivity() {
             background = GradientDrawable().apply {
                 setColor(pal.panelFill)
                 cornerRadius = 22 * d
+                setStroke((1 * d).toInt(), pal.cardStroke)
             }
         }
 
@@ -866,16 +868,17 @@ class MainActivity : AppCompatActivity() {
     //  UTILIDADES VISUALES
     // ------------------------------------------------------------------
 
-    private fun createUnifiedBlockBg(
+    // Sombreado leve en el borde para dar profundidad sin sobrecargar
+    private fun createEdgeShadedBg(
         radius: Float,
         fillColor: Int,
-        strokeColor: Int
+        edgeShadeColor: Int
     ): GradientDrawable {
         return GradientDrawable().apply {
             setColor(fillColor)
             cornerRadius = radius
-            if (strokeColor != Color.TRANSPARENT) {
-                setStroke((1f * resources.displayMetrics.density).toInt(), strokeColor)
+            if (edgeShadeColor != Color.TRANSPARENT) {
+                setStroke((1f * resources.displayMetrics.density).toInt(), edgeShadeColor)
             }
         }
     }
@@ -1093,17 +1096,17 @@ class VectorIconView(
         if (w <= 0f || h <= 0f) return
 
         strokePaint.color = iconColor
-        strokePaint.strokeWidth = (w * 0.075f).coerceAtLeast(1.8f)
+        strokePaint.strokeWidth = (w * 0.09f).coerceAtLeast(2.2f)
         fillPaint.color = iconColor
 
         when (type) {
             VectorType.GAMEPAD -> {
-                val r = RectF(w * 0.14f, h * 0.28f, w * 0.86f, h * 0.74f)
-                canvas.drawRoundRect(r, w * 0.20f, w * 0.20f, strokePaint)
-                canvas.drawLine(w * 0.28f, h * 0.51f, w * 0.41f, h * 0.51f, strokePaint)
-                canvas.drawLine(w * 0.345f, h * 0.445f, w * 0.345f, h * 0.575f, strokePaint)
-                canvas.drawCircle(w * 0.64f, h * 0.46f, w * 0.042f, fillPaint)
-                canvas.drawCircle(w * 0.72f, h * 0.55f, w * 0.042f, fillPaint)
+                val r = RectF(w * 0.12f, h * 0.26f, w * 0.88f, h * 0.76f)
+                canvas.drawRoundRect(r, w * 0.22f, w * 0.22f, strokePaint)
+                canvas.drawLine(w * 0.27f, h * 0.51f, w * 0.41f, h * 0.51f, strokePaint)
+                canvas.drawLine(w * 0.34f, h * 0.44f, w * 0.34f, h * 0.58f, strokePaint)
+                canvas.drawCircle(w * 0.64f, h * 0.46f, w * 0.045f, fillPaint)
+                canvas.drawCircle(w * 0.73f, h * 0.55f, w * 0.045f, fillPaint)
             }
             VectorType.GEAR -> {
                 val cx = w * 0.5f
@@ -1115,49 +1118,49 @@ class VectorIconView(
                     val angle = (i * (360.0 / teeth)) * (Math.PI / 180.0)
                     val x1 = cx + (radius * 0.92f * cos(angle)).toFloat()
                     val y1 = cy + (radius * 0.92f * sin(angle)).toFloat()
-                    val x2 = cx + (w * 0.42f * cos(angle)).toFloat()
-                    val y2 = cy + (h * 0.42f * sin(angle)).toFloat()
+                    val x2 = cx + (w * 0.43f * cos(angle)).toFloat()
+                    val y2 = cy + (h * 0.43f * sin(angle)).toFloat()
                     canvas.drawLine(x1, y1, x2, y2, strokePaint)
                 }
-                canvas.drawCircle(cx, cy, w * 0.09f, fillPaint)
+                canvas.drawCircle(cx, cy, w * 0.095f, fillPaint)
             }
             VectorType.GFN_LOGO -> {
                 path.reset()
-                path.moveTo(w * 0.5f, h * 0.15f)
-                path.lineTo(w * 0.84f, h * 0.34f)
-                path.lineTo(w * 0.84f, h * 0.74f)
-                path.lineTo(w * 0.5f, h * 0.92f)
-                path.lineTo(w * 0.16f, h * 0.74f)
-                path.lineTo(w * 0.16f, h * 0.34f)
+                path.moveTo(w * 0.5f, h * 0.14f)
+                path.lineTo(w * 0.85f, h * 0.34f)
+                path.lineTo(w * 0.85f, h * 0.74f)
+                path.lineTo(w * 0.5f, h * 0.93f)
+                path.lineTo(w * 0.15f, h * 0.74f)
+                path.lineTo(w * 0.15f, h * 0.34f)
                 path.close()
                 canvas.drawPath(path, strokePaint)
-                canvas.drawCircle(w * 0.5f, h * 0.535f, w * 0.13f, fillPaint)
+                canvas.drawCircle(w * 0.5f, h * 0.535f, w * 0.135f, fillPaint)
             }
             VectorType.OVERLAY_LAYERS -> {
-                val rBack = RectF(w * 0.14f, h * 0.14f, w * 0.62f, h * 0.62f)
-                strokePaint.alpha = 140
-                canvas.drawRoundRect(rBack, w * 0.11f, w * 0.11f, strokePaint)
+                val rBack = RectF(w * 0.12f, h * 0.12f, w * 0.62f, h * 0.62f)
+                strokePaint.alpha = 150
+                canvas.drawRoundRect(rBack, w * 0.12f, w * 0.12f, strokePaint)
                 strokePaint.alpha = 255
-                val rFront = RectF(w * 0.36f, h * 0.36f, w * 0.86f, h * 0.86f)
-                canvas.drawRoundRect(rFront, w * 0.11f, w * 0.11f, strokePaint)
+                val rFront = RectF(w * 0.36f, h * 0.36f, w * 0.88f, h * 0.88f)
+                canvas.drawRoundRect(rFront, w * 0.12f, w * 0.12f, strokePaint)
             }
             VectorType.SHIZUKU_LINK -> {
                 path.reset()
-                path.moveTo(w * 0.28f, h * 0.52f)
-                path.lineTo(w * 0.46f, h * 0.34f)
-                path.lineTo(w * 0.64f, h * 0.52f)
-                path.lineTo(w * 0.46f, h * 0.70f)
+                path.moveTo(w * 0.25f, h * 0.54f)
+                path.lineTo(w * 0.46f, h * 0.33f)
+                path.lineTo(w * 0.67f, h * 0.54f)
+                path.lineTo(w * 0.46f, h * 0.75f)
                 path.close()
                 canvas.drawPath(path, strokePaint)
-                canvas.drawLine(w * 0.55f, h * 0.43f, w * 0.76f, h * 0.22f, strokePaint)
-                canvas.drawLine(w * 0.22f, h * 0.76f, w * 0.43f, h * 0.55f, strokePaint)
+                canvas.drawLine(w * 0.56f, h * 0.44f, w * 0.78f, h * 0.22f, strokePaint)
+                canvas.drawLine(w * 0.22f, h * 0.78f, w * 0.42f, h * 0.58f, strokePaint)
             }
             VectorType.HUD_MONITOR -> {
-                val rScreen = RectF(w * 0.14f, h * 0.20f, w * 0.86f, h * 0.66f)
-                canvas.drawRoundRect(rScreen, w * 0.09f, w * 0.09f, strokePaint)
-                canvas.drawLine(w * 0.5f, h * 0.66f, w * 0.5f, h * 0.82f, strokePaint)
-                canvas.drawLine(w * 0.36f, h * 0.82f, w * 0.64f, h * 0.82f, strokePaint)
-                canvas.drawCircle(w * 0.5f, h * 0.43f, w * 0.045f, fillPaint)
+                val rScreen = RectF(w * 0.12f, h * 0.18f, w * 0.88f, h * 0.66f)
+                canvas.drawRoundRect(rScreen, w * 0.10f, w * 0.10f, strokePaint)
+                canvas.drawLine(w * 0.5f, h * 0.66f, w * 0.5f, h * 0.83f, strokePaint)
+                canvas.drawLine(w * 0.34f, h * 0.83f, w * 0.66f, h * 0.83f, strokePaint)
+                canvas.drawCircle(w * 0.5f, h * 0.42f, w * 0.05f, fillPaint)
             }
             VectorType.PLAY_ARROW -> {
                 path.reset()
@@ -1253,26 +1256,26 @@ class StatusCheckView(
     private val pal: GlassPalette
 ) : LinearLayout(context) {
 
-    private val iconView = VectorIconView(context, iconType, pal.textMuted, 13f * context.resources.displayMetrics.density)
+    private val d = resources.displayMetrics.density
+    private val iconView = VectorIconView(context, iconType, pal.textMuted, 15f * d)
     private val label = TextView(context)
     private val pillBg = GradientDrawable()
 
     init {
         orientation = HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        val d = resources.displayMetrics.density
         setPadding((10 * d).toInt(), (8 * d).toInt(), (10 * d).toInt(), (8 * d).toInt())
 
         pillBg.cornerRadius = 14 * d
         background = pillBg
 
-        val lp = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
-            setMargins(0, 0, (6 * d).toInt(), 0)
+        val lp = LayoutParams((15f * d).toInt(), (15f * d).toInt()).apply {
+            setMargins(0, 0, (7 * d).toInt(), 0)
         }
         iconView.layoutParams = lp
 
         label.text = title
-        label.textSize = 11f
+        label.textSize = 11.5f
         label.maxLines = 1
         label.ellipsize = TextUtils.TruncateAt.END
 
@@ -1283,10 +1286,9 @@ class StatusCheckView(
     }
 
     fun setChecked(ok: Boolean) {
-        val d = resources.displayMetrics.density
         iconView.iconColor = if (ok) pal.ok else pal.textMuted
         pillBg.setColor(if (ok) withAlpha(pal.ok, 34) else withAlpha(pal.text, 18))
-        pillBg.setStroke((1 * d).toInt(), if (ok) withAlpha(pal.ok, 75) else Color.TRANSPARENT)
+        pillBg.setStroke((1f * d).toInt(), if (ok) withAlpha(pal.ok, 75) else pal.cardStroke)
         label.setTextColor(if (ok) pal.text else pal.textMuted)
     }
 }
