@@ -12,6 +12,7 @@ import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Outline
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
@@ -28,6 +29,7 @@ import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewOutlineProvider
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.Button
 import android.widget.LinearLayout
@@ -50,7 +52,6 @@ import kotlin.math.sin
 
 class MainActivity : AppCompatActivity() {
 
-    // Datos de una tarjeta de paso (para poder actualizarla después)
     private class StepRefs(
         val root: LinearLayout,
         val badge: StepBadgeView,
@@ -59,27 +60,23 @@ class MainActivity : AppCompatActivity() {
         val bg: GradientDrawable
     )
 
-    // Apariencia (se guarda en el teléfono)
     private lateinit var prefs: SharedPreferences
     private var themeMode = "dark"      // "dark", "light" o "wallpaper"
     private var blurPct = 50            // 0..100
-    private var opacityPct = 45         // 15..70 (máximo 70%)
+    private var opacityPct = 45         // 15..70
     private lateinit var pal: GlassPalette
     private var settingsDialog: Dialog? = null
 
-    // Píldoras de estado
     private lateinit var checkOverlay: StatusCheckView
     private lateinit var checkShizukuAlive: StatusCheckView
     private lateinit var checkShizukuPerm: StatusCheckView
     private lateinit var checkMouse: StatusCheckView
     private lateinit var tvGfnSub: TextView
 
-    // Pasos
     private lateinit var stepOverlay: StepRefs
     private lateinit var stepShizuku: StepRefs
     private lateinit var stepHud: StepRefs
 
-    // Botón JUGAR
     private lateinit var playCard: LinearLayout
     private lateinit var playTitle: TextView
     private lateinit var playSub: TextView
@@ -90,10 +87,7 @@ class MainActivity : AppCompatActivity() {
     private var allReady = false
 
     private var uiReady = false
-
-    // Animador de respiración
     private var breathingAnimator: ValueAnimator? = null
-    private val glowingBorders = mutableListOf<GradientDrawable>()
 
     private val shizukuPermissionListener = Shizuku.OnRequestPermissionResultListener { _, grantResult ->
         if (grantResult == PackageManager.PERMISSION_GRANTED) {
@@ -110,7 +104,6 @@ class MainActivity : AppCompatActivity() {
         blurPct = prefs.getInt("blur", 50).coerceIn(0, 100)
         opacityPct = prefs.getInt("opacity", 45).coerceIn(15, 70)
 
-        // La app se dibuja bajo las barras del sistema para que el cristal llegue hasta los bordes
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         try {
@@ -142,7 +135,6 @@ class MainActivity : AppCompatActivity() {
             .apply()
     }
 
-    // Lee los colores del fondo de pantalla: devuelve (color de acento, ¿fondo claro?)
     private fun readWallpaper(): Pair<Int, Boolean>? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1) return null
         return try {
@@ -163,7 +155,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Ajusta el color para que siempre se lea bien sobre el cristal
     private fun tuneAccent(c: Int, light: Boolean): Int {
         val hsv = FloatArray(3)
         Color.colorToHSV(c, hsv)
@@ -174,11 +165,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun buildPalette(): GlassPalette {
         var light = false
-        var accent = Color.parseColor("#FF2A4D")
+        var accent = Color.parseColor("#FF3B5C")
         when (themeMode) {
             "light" -> {
                 light = true
-                accent = Color.parseColor("#D50024")
+                accent = Color.parseColor("#C81E3A")
             }
             "wallpaper" -> {
                 val wp = readWallpaper()
@@ -188,23 +179,28 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        val base = if (light) Color.WHITE else Color.rgb(20, 14, 18)
-        val fillAlpha = (opacityPct / 100f * 255f).toInt()
-        val panelAlpha = (maxOf(opacityPct + 15, 55).coerceAtMost(70) / 100f * 255f).toInt()
+
+        // Tonos limpios sin velo grisáceo/blanquecino lavado
+        val base = if (light) Color.rgb(245, 246, 249) else Color.rgb(18, 20, 26)
+        val surfaceTone = if (light) Color.rgb(255, 255, 255) else Color.rgb(30, 33, 42)
+        val fillAlpha = (opacityPct.coerceIn(28, 70) / 100f * 255f).toInt()
+        val panelAlpha = (maxOf(opacityPct + 18, 65).coerceAtMost(88) / 100f * 255f).toInt()
 
         return GlassPalette(
             isLight = light,
             accent = accent,
-            accentSoft = if (light) accent else ColorUtils.blendARGB(accent, Color.WHITE, 0.25f),
+            accentSoft = if (light) accent else ColorUtils.blendARGB(accent, Color.WHITE, 0.22f),
             accentDark = ColorUtils.blendARGB(accent, Color.BLACK, 0.45f),
-            text = if (light) Color.rgb(26, 18, 22) else Color.WHITE,
-            textSub = if (light) Color.rgb(90, 80, 88) else Color.rgb(181, 186, 198),
-            textMuted = if (light) Color.rgb(125, 116, 124) else Color.rgb(138, 143, 156),
-            cardFill = withAlpha(base, fillAlpha),
-            cardStroke = if (light) Color.argb(60, 0, 0, 0) else Color.argb(60, 255, 255, 255),
-            panelFill = withAlpha(base, panelAlpha),
-            scrim = if (light) Color.argb(77, 255, 255, 255) else Color.argb(89, 0, 0, 0),
-            ok = if (light) Color.rgb(46, 125, 50) else Color.rgb(76, 175, 80)
+            text = if (light) Color.rgb(20, 22, 28) else Color.rgb(244, 246, 250),
+            textSub = if (light) Color.rgb(92, 98, 112) else Color.rgb(172, 178, 194),
+            textMuted = if (light) Color.rgb(130, 136, 150) else Color.rgb(122, 129, 146),
+            cardFill = withAlpha(surfaceTone, fillAlpha),
+            // Sin bordes rojos: solo un hilo ultra sutil para separar el tono
+            cardStroke = if (light) Color.argb(18, 0, 0, 0) else Color.argb(22, 255, 255, 255),
+            panelFill = withAlpha(surfaceTone, panelAlpha),
+            scrim = if (light) Color.argb(215, 240, 242, 247) else Color.argb(210, 12, 14, 19),
+            ok = if (light) Color.rgb(34, 139, 78) else Color.rgb(74, 204, 122),
+            backdrop = base
         )
     }
 
@@ -221,7 +217,6 @@ class MainActivity : AppCompatActivity() {
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && crossWindowBlurEnabled()
     }
 
-    // Desenfoca el fondo de pantalla que se ve detrás de la app (Android 12+)
     private fun applyWindowBlur() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val radius = if (crossWindowBlurEnabled()) {
@@ -236,14 +231,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Iconos de la barra de estado: oscuros en tema claro, claros en tema oscuro
     private fun applySystemBars() {
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
         val c = WindowInsetsControllerCompat(window, window.decorView)
         c.isAppearanceLightStatusBars = pal.isLight
         c.isAppearanceLightNavigationBars = pal.isLight
     }
 
-    // Guarda, reconstruye toda la pantalla con los nuevos colores y reabre Ajustes donde estaba
     private fun applyAppearanceAndReopen(scrollY: Int) {
         saveAppearance()
         settingsDialog?.dismiss()
@@ -258,82 +253,94 @@ class MainActivity : AppCompatActivity() {
     private fun buildUi() {
         uiReady = false
         breathingAnimator?.cancel()
-        glowingBorders.clear()
         pal = buildPalette()
 
         val d = resources.displayMetrics.density
-        val padH = (16 * d).toInt()
+        val padH = (18 * d).toInt()
+
+        val outerContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(pal.backdrop)
+        }
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(padH, (8 * d).toInt(), padH, (16 * d).toInt())
-            // Capa suave encima del fondo desenfocado para que el texto se lea siempre
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(padH, (18 * d).toInt(), padH, (18 * d).toInt())
             setBackgroundColor(pal.scrim)
         }
 
-        // --- 1. CABECERA ---
+        // --- 1. CABECERA LIMPIA (sin choque con la barra de estado) ---
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, (8 * d).toInt(), 0, (16 * d).toInt())
+            setPadding((2 * d).toInt(), (10 * d).toInt(), (2 * d).toInt(), (20 * d).toInt())
         }
 
-        val logoIcon = VectorIconView(this, VectorType.GAMEPAD, pal.accent, dp(32f))
+        val logoBadge = LinearLayout(this).apply {
+            gravity = Gravity.CENTER
+            val sz = (44 * d).toInt()
+            layoutParams = LinearLayout.LayoutParams(sz, sz)
+            background = createUnifiedBlockBg(14 * d, withAlpha(pal.accent, if (pal.isLight) 24 else 32), Color.TRANSPARENT, shadowDp = 2f * d)
+            addView(VectorIconView(context, VectorType.GAMEPAD, pal.accent, dp(24f)))
+        }
 
         val titleContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding((12 * d).toInt(), 0, 0, 0)
+            setPadding((14 * d).toInt(), 0, 0, 0)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
 
         val titleMain = TextView(this).apply {
             text = "GFN"
-            textSize = 24f
+            textSize = 23f
             setTextColor(pal.text)
             setTypeface(null, Typeface.BOLD)
+            letterSpacing = 0.02f
         }
 
         val titleSub = TextView(this).apply {
             text = "Touch Controls"
-            textSize = 14.5f
-            setTextColor(pal.accent)
-            setTypeface(null, Typeface.BOLD)
+            textSize = 13f
+            setTextColor(pal.textSub)
+            setTypeface(null, Typeface.NORMAL)
         }
         titleContainer.addView(titleMain)
         titleContainer.addView(titleSub)
 
         val btnSettings = LinearLayout(this).apply {
             gravity = Gravity.CENTER
-            setPadding((10 * d).toInt(), (10 * d).toInt(), (10 * d).toInt(), (10 * d).toInt())
-            background = createCardBg(12 * d, pal.cardFill, pal.cardStroke)
-            addView(VectorIconView(context, VectorType.GEAR, pal.text, dp(22f)))
+            val sz = (42 * d).toInt()
+            layoutParams = LinearLayout.LayoutParams(sz, sz)
+            background = createUnifiedBlockBg(14 * d, pal.cardFill, pal.cardStroke, shadowDp = 3f * d)
+            addView(VectorIconView(context, VectorType.GEAR, pal.text, dp(20f)))
         }
         makeClickable(btnSettings) { showSettingsDialog() }
 
-        header.addView(logoIcon)
+        header.addView(logoBadge)
         header.addView(titleContainer)
         header.addView(btnSettings)
         root.addView(header)
 
-        // --- 2. TARJETA DE ESTADO ---
+        // --- 2. TARJETA DE ESTADO ("UNA SOLA PIEZA" + SOMBRA LEVE) ---
         val heroCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding((16 * d).toInt(), (16 * d).toInt(), (16 * d).toInt(), (14 * d).toInt())
-            background = createCardBg(18 * d, pal.cardFill, withAlpha(pal.accent, 170), true)
+            setPadding((18 * d).toInt(), (18 * d).toInt(), (18 * d).toInt(), (16 * d).toInt())
+            background = createUnifiedBlockBg(22 * d, pal.cardFill, pal.cardStroke, shadowDp = 6f * d)
         }
 
         val heroTop = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val gfnLogo = VectorIconView(this, VectorType.GFN_LOGO, Color.parseColor("#76B900"), dp(38f))
+        val gfnLogo = VectorIconView(this, VectorType.GFN_LOGO, Color.parseColor("#76B900"), dp(36f))
         val gfnTextCol = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding((12 * d).toInt(), 0, 0, 0)
+            setPadding((14 * d).toInt(), 0, 0, 0)
         }
         val gfnText = TextView(this).apply {
             text = "GeForce NOW"
-            textSize = 15f
+            textSize = 15.5f
             setTextColor(pal.text)
             setTypeface(null, Typeface.BOLD)
         }
@@ -348,15 +355,15 @@ class MainActivity : AppCompatActivity() {
         heroTop.addView(gfnTextCol)
         heroCard.addView(heroTop)
 
-        checkOverlay = StatusCheckView(this, "Overlay", pal)
-        checkShizukuAlive = StatusCheckView(this, "Shizuku activo", pal)
-        checkShizukuPerm = StatusCheckView(this, "Permiso Shizuku", pal)
-        checkMouse = StatusCheckView(this, "Ratón virtual", pal)
+        checkOverlay = StatusCheckView(this, "Overlay", VectorType.OVERLAY_LAYERS, pal)
+        checkShizukuAlive = StatusCheckView(this, "Shizuku activo", VectorType.SHIZUKU_LINK, pal)
+        checkShizukuPerm = StatusCheckView(this, "Permiso Shizuku", VectorType.SHIZUKU_LINK, pal)
+        checkMouse = StatusCheckView(this, "Ratón virtual", VectorType.HUD_MONITOR, pal)
 
         heroCard.addView(
             pillRow(d, checkOverlay, checkShizukuAlive),
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-                .apply { topMargin = (14 * d).toInt() }
+                .apply { topMargin = (16 * d).toInt() }
         )
         heroCard.addView(
             pillRow(d, checkShizukuPerm, checkMouse),
@@ -365,16 +372,17 @@ class MainActivity : AppCompatActivity() {
         )
         root.addView(heroCard)
 
-        root.addView(space(20 * d))
+        root.addView(space(22 * d))
 
-        // --- 3. PASOS NUMERADOS ---
+        // --- 3. PASOS NUMERADOS (BLOQUES INTEGRADOS SIN BORDES ROJOS) ---
         val sectionLabel = TextView(this).apply {
             text = "CONFIGURACIÓN"
-            textSize = 10f
+            textSize = 10.5f
             setTextColor(pal.textMuted)
             setTypeface(null, Typeface.BOLD)
-            letterSpacing = 0.18f
-            setPadding((4 * d).toInt(), 0, 0, (10 * d).toInt())
+            letterSpacing = 0.16f
+            setPadding((6 * d).toInt(), 0, 0, (10 * d).toInt())
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
         root.addView(sectionLabel)
 
@@ -394,9 +402,9 @@ class MainActivity : AppCompatActivity() {
         root.addView(stepShizuku.root)
         root.addView(stepHud.root)
 
-        // Espacio flexible: empuja el botón JUGAR hacia abajo cuando sobra pantalla
+        // Espacio flexible para centrar mejor la composición verticalmente
         root.addView(View(this).apply {
-            minimumHeight = (12 * d).toInt()
+            minimumHeight = (16 * d).toInt()
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
         })
 
@@ -405,18 +413,12 @@ class MainActivity : AppCompatActivity() {
             GradientDrawable.Orientation.TL_BR,
             intArrayOf(
                 pal.accent,
-                pal.accentDark,
-                ColorUtils.blendARGB(pal.accent, Color.BLACK, 0.7f)
+                ColorUtils.blendARGB(pal.accent, pal.accentDark, 0.55f)
             )
         ).apply {
-            cornerRadius = 18 * d
-            setStroke((1.5f * d).toInt(), pal.accentSoft)
+            cornerRadius = 20 * d
         }
-        playIdleBg = GradientDrawable().apply {
-            setColor(pal.cardFill)
-            cornerRadius = 18 * d
-            setStroke((1.4f * d).toInt(), pal.cardStroke)
-        }
+        playIdleBg = createUnifiedBlockBg(20 * d, pal.cardFill, pal.cardStroke, shadowDp = 5f * d)
 
         playCard = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -427,8 +429,11 @@ class MainActivity : AppCompatActivity() {
                 (70 * d).toInt()
             )
             background = playIdleBg
+            outlineProvider = RoundedOutlineProvider(20 * d)
+            clipToOutline = false
+            elevation = 6 * d
         }
-        playIcon = VectorIconView(this, VectorType.PLAY_ARROW, pal.textMuted, 26 * d)
+        playIcon = VectorIconView(this, VectorType.PLAY_ARROW, pal.textMuted, 24 * d)
         val playTextCol = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding((14 * d).toInt(), 0, 0, 0)
@@ -436,10 +441,10 @@ class MainActivity : AppCompatActivity() {
         }
         playTitle = TextView(this).apply {
             text = "JUGAR"
-            textSize = 16f
+            textSize = 15.5f
             setTextColor(pal.textMuted)
             setTypeface(null, Typeface.BOLD)
-            letterSpacing = 0.14f
+            letterSpacing = 0.12f
         }
         playSub = TextView(this).apply {
             text = "Completa los pasos"
@@ -466,11 +471,11 @@ class MainActivity : AppCompatActivity() {
         }
         root.addView(playCard)
 
-        // --- 5. PIE DE PÁGINA ---
+        // --- 5. PIE DE PÁGINA CLEAN ---
         val footer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(0, (18 * d).toInt(), 0, (4 * d).toInt())
+            setPadding(0, (18 * d).toInt(), 0, (6 * d).toInt())
         }
 
         val footerFrame = TextView(this).apply {
@@ -478,19 +483,19 @@ class MainActivity : AppCompatActivity() {
             textSize = 10f
             setTextColor(pal.textSub)
             setTypeface(null, Typeface.BOLD)
-            letterSpacing = 0.22f
+            letterSpacing = 0.20f
             gravity = Gravity.CENTER
-            setPadding((16 * d).toInt(), (5 * d).toInt(), (16 * d).toInt(), (5 * d).toInt())
-            background = createCardBg(12 * d, pal.cardFill, withAlpha(pal.accent, 140), true)
+            setPadding((16 * d).toInt(), (6 * d).toInt(), (16 * d).toInt(), (6 * d).toInt())
+            background = createUnifiedBlockBg(12 * d, withAlpha(pal.cardFill, 140), Color.TRANSPARENT, shadowDp = 0f)
         }
 
         val footerSub = TextView(this).apply {
-            text = "— CONTROL TOTAL EN TUS MANOS —"
+            text = "CONTROL TOTAL EN TUS MANOS"
             textSize = 9f
             setTextColor(pal.textMuted)
-            letterSpacing = 0.16f
+            letterSpacing = 0.14f
             gravity = Gravity.CENTER
-            setPadding(0, (5 * d).toInt(), 0, 0)
+            setPadding(0, (6 * d).toInt(), 0, 0)
         }
 
         footer.addView(footerFrame)
@@ -499,14 +504,20 @@ class MainActivity : AppCompatActivity() {
 
         val scroll = ScrollView(this).apply {
             isFillViewport = true
+            overScrollMode = View.OVER_SCROLL_NEVER
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.MATCH_PARENT
+            )
             addView(root)
         }
-        setContentView(scroll)
+        outerContainer.addView(scroll)
+        setContentView(outerContainer)
 
-        // Respetar la barra de estado (hora, batería) y la barra de navegación
-        ViewCompat.setOnApplyWindowInsetsListener(scroll) { v, insets ->
+        // Margen limpio en la barra de estado y navegación sin recortes ni choques
+        ViewCompat.setOnApplyWindowInsetsListener(outerContainer) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(0, bars.top, 0, bars.bottom)
+            v.setPadding(0, bars.top + (6 * d).toInt(), 0, bars.bottom)
             insets
         }
 
@@ -514,20 +525,18 @@ class MainActivity : AppCompatActivity() {
         applyWindowBlur()
 
         uiReady = true
-        startBreathingAnimation()
         refreshStatus()
     }
 
     private fun dp(v: Float) = v * resources.displayMetrics.density
 
-    // Hace que una vista responda al toque: se hunde un poco y vibra suave
     @SuppressLint("ClickableViewAccessibility")
     private fun makeClickable(v: View, onClick: () -> Unit) {
         v.isClickable = true
         v.setOnTouchListener { view, ev ->
             when (ev.action) {
                 MotionEvent.ACTION_DOWN ->
-                    view.animate().scaleX(0.97f).scaleY(0.97f).setDuration(80).start()
+                    view.animate().scaleX(0.975f).scaleY(0.975f).setDuration(80).start()
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
                     view.animate().scaleX(1f).scaleY(1f).setDuration(120).start()
             }
@@ -545,17 +554,17 @@ class MainActivity : AppCompatActivity() {
             addView(
                 a,
                 LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-                    .apply { rightMargin = (4 * d).toInt() }
+                    .apply { rightMargin = (5 * d).toInt() }
             )
             addView(
                 b,
                 LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-                    .apply { leftMargin = (4 * d).toInt() }
+                    .apply { leftMargin = (5 * d).toInt() }
             )
         }
     }
 
-    // Tarjeta de paso numerada
+    // Tarjeta de paso de una sola pieza, sin bordes rojos
     private fun createStepCard(
         d: Float,
         number: Int,
@@ -563,17 +572,19 @@ class MainActivity : AppCompatActivity() {
         subtitle: String,
         onClick: () -> Unit
     ): StepRefs {
-        val bg = createCardBg(16 * d, pal.cardFill, pal.cardStroke)
+        val bg = createUnifiedBlockBg(18 * d, pal.cardFill, pal.cardStroke, shadowDp = 4f * d)
 
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding((14 * d).toInt(), (14 * d).toInt(), (14 * d).toInt(), (14 * d).toInt())
+            setPadding((16 * d).toInt(), (14 * d).toInt(), (16 * d).toInt(), (14 * d).toInt())
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { bottomMargin = (10 * d).toInt() }
             background = bg
+            outlineProvider = RoundedOutlineProvider(18 * d)
+            elevation = 4 * d
         }
 
         val badgeSize = (30 * d).toInt()
@@ -599,7 +610,7 @@ class MainActivity : AppCompatActivity() {
         textCol.addView(tvTitle)
         textCol.addView(tvSub)
 
-        val arrow = VectorIconView(this, VectorType.CHEVRON_RIGHT, pal.accent, 14 * d)
+        val arrow = VectorIconView(this, VectorType.CHEVRON_RIGHT, pal.textSub, 15 * d)
 
         card.addView(badge, LinearLayout.LayoutParams(badgeSize, badgeSize))
         card.addView(textCol)
@@ -609,13 +620,23 @@ class MainActivity : AppCompatActivity() {
         return StepRefs(card, badge, tvTitle, tvSub, bg)
     }
 
+    // Sin bordes rojos: solo sutil diferencia de tono en el paso actual
     private fun applyStepStyle(s: StepRefs, done: Boolean, current: Boolean) {
         val d = resources.displayMetrics.density
         s.badge.setState(done, current)
         when {
-            current -> s.bg.setStroke((1.8f * d).toInt(), pal.accent)
-            done -> s.bg.setStroke((1.4f * d).toInt(), withAlpha(pal.ok, 140))
-            else -> s.bg.setStroke((1.4f * d).toInt(), pal.cardStroke)
+            current -> {
+                s.bg.setColor(withAlpha(pal.accent, if (pal.isLight) 24 else 34))
+                s.bg.setStroke((1 * d).toInt(), withAlpha(pal.accent, 65))
+            }
+            done -> {
+                s.bg.setColor(pal.cardFill)
+                s.bg.setStroke((1 * d).toInt(), withAlpha(pal.ok, 55))
+            }
+            else -> {
+                s.bg.setColor(pal.cardFill)
+                s.bg.setStroke((1 * d).toInt(), pal.cardStroke)
+            }
         }
         s.title.setTextColor(if (done) pal.textSub else pal.text)
     }
@@ -636,7 +657,6 @@ class MainActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(pad, pad, pad, pad)
-            // Panel de cristal: sin borde, esquinas redondeadas
             background = GradientDrawable().apply {
                 setColor(pal.panelFill)
                 cornerRadius = 22 * d
@@ -676,7 +696,6 @@ class MainActivity : AppCompatActivity() {
             setPadding(0, (10 * d).toInt(), 0, (10 * d).toInt())
         }
 
-        // --- Apariencia ---
         addDialogTitle(body, "Apariencia")
         addThemeSelector(body) { mode ->
             if (mode != themeMode) {
@@ -757,7 +776,6 @@ class MainActivity : AppCompatActivity() {
         parent.addView(tv)
     }
 
-    // Selector de tema: Oscuro / Claro / Fondo
     private fun addThemeSelector(parent: LinearLayout, onPick: (String) -> Unit) {
         val d = resources.displayMetrics.density
         val row = LinearLayout(this).apply {
@@ -844,37 +862,30 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ------------------------------------------------------------------
-    //  ANIMACIÓN Y UTILIDADES
+    //  UTILIDADES VISUALES
     // ------------------------------------------------------------------
 
-    // Los bordes brillantes "respiran" con el color de acento del tema
-    private fun startBreathingAnimation() {
-        val r = Color.red(pal.accent)
-        val g = Color.green(pal.accent)
-        val b = Color.blue(pal.accent)
-        breathingAnimator = ValueAnimator.ofFloat(0.35f, 1.0f).apply {
-            duration = 2800L
-            repeatMode = ValueAnimator.REVERSE
-            repeatCount = ValueAnimator.INFINITE
-            interpolator = AccelerateDecelerateInterpolator()
-            addUpdateListener { anim ->
-                val fraction = anim.animatedValue as Float
-                val alpha = (fraction * 255).toInt().coerceIn(60, 255)
-                val strokeColor = Color.argb(alpha, r, g, b)
-                for (bg in glowingBorders) {
-                    bg.setStroke((1.4f * resources.displayMetrics.density).toInt(), strokeColor)
-                }
-            }
-            start()
-        }
-    }
-
-    private fun createCardBg(radius: Float, fillColor: Int, strokeColor: Int, trackGlow: Boolean = false): GradientDrawable {
+    private fun createUnifiedBlockBg(
+        radius: Float,
+        fillColor: Int,
+        strokeColor: Int,
+        shadowDp: Float = 0f
+    ): GradientDrawable {
         return GradientDrawable().apply {
             setColor(fillColor)
             cornerRadius = radius
-            setStroke((1.4f * resources.displayMetrics.density).toInt(), strokeColor)
-            if (trackGlow) glowingBorders.add(this)
+            if (strokeColor != Color.TRANSPARENT) {
+                setStroke((1f * resources.displayMetrics.density).toInt(), strokeColor)
+            }
+            if (shadowDp > 0f) {
+                // Mantiene compatibilidad de sombra sutil mediante elevación en la vista
+            }
+        }
+    }
+
+    private class RoundedOutlineProvider(private val radius: Float) : ViewOutlineProvider() {
+        override fun getOutline(view: View, outline: Outline) {
+            outline.setRoundRect(0, 0, view.width, view.height, radius)
         }
     }
 
@@ -884,7 +895,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Si el tema sigue al fondo de pantalla y el usuario lo cambió, se actualizan los colores
         if (themeMode == "wallpaper" && uiReady) {
             val np = buildPalette()
             if (np.accent != pal.accent || np.isLight != pal.isLight) {
@@ -954,7 +964,6 @@ class MainActivity : AppCompatActivity() {
         val connected = shizukuPerm && mouseOk
         val hudRunning = OverlayService.isRunning
 
-        // Píldoras
         checkOverlay.setChecked(overlayOk)
         checkShizukuAlive.setChecked(shizukuAlive)
         checkShizukuPerm.setChecked(shizukuPerm)
@@ -963,7 +972,6 @@ class MainActivity : AppCompatActivity() {
         tvGfnSub.text = if (connected) "Conectado" else "Listo para iniciar"
         tvGfnSub.setTextColor(if (connected) pal.ok else pal.textSub)
 
-        // Paso actual: el primero que falta
         val current = when {
             !overlayOk -> 1
             !connected -> 2
@@ -986,7 +994,6 @@ class MainActivity : AppCompatActivity() {
         stepHud.title.text = if (hudRunning) "Detener HUD" else "Iniciar HUD"
         stepHud.sub.text = if (hudRunning) "Cerrar controles" else "Activar controles"
 
-        // Botón JUGAR
         allReady = current == 0
         if (allReady) {
             playCard.background = playReadyBg
@@ -1018,7 +1025,7 @@ class MainActivity : AppCompatActivity() {
 }
 
 // ----------------------------------------------------------------------
-//  PALETA DE COLORES DEL TEMA (cristal)
+//  PALETA DE COLORES DEL TEMA
 // ----------------------------------------------------------------------
 
 private fun withAlpha(c: Int, a: Int): Int =
@@ -1036,10 +1043,11 @@ class GlassPalette(
     val cardStroke: Int,
     val panelFill: Int,
     val scrim: Int,
-    val ok: Int
+    val ok: Int,
+    val backdrop: Int = Color.rgb(18, 20, 26)
 )
 
-// --- CLASES VECTORIALES PERSONALIZADAS (CERO EMOJIS, 100% CÓDIGO VECTORIAL NATIVO) ---
+// --- ICONOS VECTORIALES CLEAN ---
 
 enum class VectorType {
     GAMEPAD,
@@ -1053,9 +1061,13 @@ enum class VectorType {
 }
 
 @SuppressLint("ViewConstructor")
-class VectorIconView(context: Context, private val type: VectorType, color: Int, private val sizePx: Float) : View(context) {
+class VectorIconView(
+    context: Context,
+    private val type: VectorType,
+    color: Int,
+    private val sizePx: Float
+) : View(context) {
 
-    // Color del icono; se puede cambiar en cualquier momento
     var iconColor: Int = color
         set(value) {
             field = value
@@ -1085,92 +1097,91 @@ class VectorIconView(context: Context, private val type: VectorType, color: Int,
         if (w <= 0f || h <= 0f) return
 
         strokePaint.color = iconColor
-        strokePaint.strokeWidth = w * 0.085f
+        strokePaint.strokeWidth = (w * 0.075f).coerceAtLeast(1.8f)
         fillPaint.color = iconColor
 
         when (type) {
             VectorType.GAMEPAD -> {
-                val r = RectF(w * 0.12f, h * 0.26f, w * 0.88f, h * 0.76f)
-                canvas.drawRoundRect(r, w * 0.22f, w * 0.22f, strokePaint)
-                canvas.drawLine(w * 0.28f, h * 0.51f, w * 0.42f, h * 0.51f, strokePaint)
-                canvas.drawLine(w * 0.35f, h * 0.44f, w * 0.35f, h * 0.58f, strokePaint)
-                canvas.drawCircle(w * 0.65f, h * 0.46f, w * 0.045f, fillPaint)
-                canvas.drawCircle(w * 0.73f, h * 0.54f, w * 0.045f, fillPaint)
+                val r = RectF(w * 0.14f, h * 0.28f, w * 0.86f, h * 0.74f)
+                canvas.drawRoundRect(r, w * 0.20f, w * 0.20f, strokePaint)
+                canvas.drawLine(w * 0.28f, h * 0.51f, w * 0.41f, h * 0.51f, strokePaint)
+                canvas.drawLine(w * 0.345f, h * 0.445f, w * 0.345f, h * 0.575f, strokePaint)
+                canvas.drawCircle(w * 0.64f, h * 0.46f, w * 0.042f, fillPaint)
+                canvas.drawCircle(w * 0.72f, h * 0.55f, w * 0.042f, fillPaint)
             }
             VectorType.GEAR -> {
                 val cx = w * 0.5f
                 val cy = h * 0.5f
-                val radius = w * 0.30f
+                val radius = w * 0.27f
                 canvas.drawCircle(cx, cy, radius, strokePaint)
                 val teeth = 6
                 for (i in 0 until teeth) {
                     val angle = (i * (360.0 / teeth)) * (Math.PI / 180.0)
-                    val x1 = cx + (radius * 0.85f * cos(angle)).toFloat()
-                    val y1 = cy + (radius * 0.85f * sin(angle)).toFloat()
-                    val x2 = cx + (w * 0.45f * cos(angle)).toFloat()
-                    val y2 = cy + (h * 0.45f * sin(angle)).toFloat()
+                    val x1 = cx + (radius * 0.92f * cos(angle)).toFloat()
+                    val y1 = cy + (radius * 0.92f * sin(angle)).toFloat()
+                    val x2 = cx + (w * 0.42f * cos(angle)).toFloat()
+                    val y2 = cy + (h * 0.42f * sin(angle)).toFloat()
                     canvas.drawLine(x1, y1, x2, y2, strokePaint)
                 }
-                canvas.drawCircle(cx, cy, w * 0.12f, fillPaint)
+                canvas.drawCircle(cx, cy, w * 0.09f, fillPaint)
             }
             VectorType.GFN_LOGO -> {
                 path.reset()
-                path.moveTo(w * 0.5f, h * 0.16f)
-                path.lineTo(w * 0.85f, h * 0.36f)
-                path.lineTo(w * 0.85f, h * 0.76f)
-                path.lineTo(w * 0.5f, h * 0.94f)
-                path.lineTo(w * 0.15f, h * 0.76f)
-                path.lineTo(w * 0.15f, h * 0.36f)
+                path.moveTo(w * 0.5f, h * 0.15f)
+                path.lineTo(w * 0.84f, h * 0.34f)
+                path.lineTo(w * 0.84f, h * 0.74f)
+                path.lineTo(w * 0.5f, h * 0.92f)
+                path.lineTo(w * 0.16f, h * 0.74f)
+                path.lineTo(w * 0.16f, h * 0.34f)
                 path.close()
                 canvas.drawPath(path, strokePaint)
-                canvas.drawCircle(w * 0.5f, h * 0.55f, w * 0.14f, fillPaint)
+                canvas.drawCircle(w * 0.5f, h * 0.535f, w * 0.13f, fillPaint)
             }
             VectorType.OVERLAY_LAYERS -> {
-                val rBack = RectF(w * 0.12f, h * 0.12f, w * 0.62f, h * 0.62f)
-                strokePaint.alpha = 130
-                canvas.drawRoundRect(rBack, w * 0.1f, w * 0.1f, strokePaint)
+                val rBack = RectF(w * 0.14f, h * 0.14f, w * 0.62f, h * 0.62f)
+                strokePaint.alpha = 140
+                canvas.drawRoundRect(rBack, w * 0.11f, w * 0.11f, strokePaint)
                 strokePaint.alpha = 255
-                val rFront = RectF(w * 0.35f, h * 0.35f, w * 0.88f, h * 0.88f)
-                canvas.drawRoundRect(rFront, w * 0.1f, w * 0.1f, strokePaint)
+                val rFront = RectF(w * 0.36f, h * 0.36f, w * 0.86f, h * 0.86f)
+                canvas.drawRoundRect(rFront, w * 0.11f, w * 0.11f, strokePaint)
             }
             VectorType.SHIZUKU_LINK -> {
                 path.reset()
                 path.moveTo(w * 0.28f, h * 0.52f)
-                path.lineTo(w * 0.45f, h * 0.35f)
-                path.lineTo(w * 0.62f, h * 0.52f)
-                path.lineTo(w * 0.45f, h * 0.69f)
+                path.lineTo(w * 0.46f, h * 0.34f)
+                path.lineTo(w * 0.64f, h * 0.52f)
+                path.lineTo(w * 0.46f, h * 0.70f)
                 path.close()
                 canvas.drawPath(path, strokePaint)
-                canvas.drawLine(w * 0.52f, h * 0.45f, w * 0.76f, h * 0.21f, strokePaint)
-                canvas.drawLine(w * 0.21f, h * 0.76f, w * 0.45f, h * 0.52f, strokePaint)
+                canvas.drawLine(w * 0.55f, h * 0.43f, w * 0.76f, h * 0.22f, strokePaint)
+                canvas.drawLine(w * 0.22f, h * 0.76f, w * 0.43f, h * 0.55f, strokePaint)
             }
             VectorType.HUD_MONITOR -> {
-                val rScreen = RectF(w * 0.12f, h * 0.18f, w * 0.88f, h * 0.68f)
-                canvas.drawRoundRect(rScreen, w * 0.08f, w * 0.08f, strokePaint)
-                canvas.drawLine(w * 0.5f, h * 0.68f, w * 0.5f, h * 0.84f, strokePaint)
-                canvas.drawLine(w * 0.35f, h * 0.84f, w * 0.65f, h * 0.84f, strokePaint)
-                canvas.drawCircle(w * 0.5f, h * 0.43f, w * 0.05f, fillPaint)
+                val rScreen = RectF(w * 0.14f, h * 0.20f, w * 0.86f, h * 0.66f)
+                canvas.drawRoundRect(rScreen, w * 0.09f, w * 0.09f, strokePaint)
+                canvas.drawLine(w * 0.5f, h * 0.66f, w * 0.5f, h * 0.82f, strokePaint)
+                canvas.drawLine(w * 0.36f, h * 0.82f, w * 0.64f, h * 0.82f, strokePaint)
+                canvas.drawCircle(w * 0.5f, h * 0.43f, w * 0.045f, fillPaint)
             }
             VectorType.PLAY_ARROW -> {
                 path.reset()
-                path.moveTo(w * 0.30f, h * 0.22f)
-                path.lineTo(w * 0.82f, h * 0.50f)
-                path.lineTo(w * 0.30f, h * 0.78f)
+                path.moveTo(w * 0.32f, h * 0.24f)
+                path.lineTo(w * 0.80f, h * 0.50f)
+                path.lineTo(w * 0.32f, h * 0.76f)
                 path.close()
                 canvas.drawPath(path, fillPaint)
             }
             VectorType.CHEVRON_RIGHT -> {
                 path.reset()
-                path.moveTo(w * 0.32f, h * 0.18f)
-                path.lineTo(w * 0.68f, h * 0.50f)
-                path.lineTo(w * 0.32f, h * 0.82f)
+                path.moveTo(w * 0.35f, h * 0.22f)
+                path.lineTo(w * 0.66f, h * 0.50f)
+                path.lineTo(w * 0.35f, h * 0.78f)
                 canvas.drawPath(path, strokePaint)
             }
         }
     }
 }
 
-// Círculo numerado del paso: número (pendiente), color de acento (actual) o tilde verde (hecho)
 @SuppressLint("ViewConstructor")
 class StepBadgeView(
     context: Context,
@@ -1216,33 +1227,37 @@ class StepBadgeView(
         val r = w / 2f - 1f
 
         fillPaint.color = when {
-            done -> Color.parseColor("#2E7D32")
+            done -> pal.ok
             current -> pal.accent
-            else -> withAlpha(pal.text, 38)
+            else -> withAlpha(pal.text, 28)
         }
         canvas.drawCircle(cx, cy, r, fillPaint)
 
         if (done) {
-            linePaint.strokeWidth = w * 0.09f
+            linePaint.strokeWidth = w * 0.085f
             path.reset()
-            path.moveTo(w * 0.29f, h * 0.52f)
+            path.moveTo(w * 0.30f, h * 0.52f)
             path.lineTo(w * 0.44f, h * 0.66f)
-            path.lineTo(w * 0.72f, h * 0.36f)
+            path.lineTo(w * 0.71f, h * 0.37f)
             canvas.drawPath(path, linePaint)
         } else {
             textPaint.color = if (current) Color.WHITE else pal.textSub
-            textPaint.textSize = w * 0.46f
+            textPaint.textSize = w * 0.44f
             val y = cy - (textPaint.descent() + textPaint.ascent()) / 2f
             canvas.drawText(number.toString(), cx, y, textPaint)
         }
     }
 }
 
-// Píldora de estado: punto de color + texto (verde = OK, gris = pendiente)
 @SuppressLint("ViewConstructor")
-class StatusCheckView(context: Context, title: String, private val pal: GlassPalette) : LinearLayout(context) {
+class StatusCheckView(
+    context: Context,
+    title: String,
+    iconType: VectorType,
+    private val pal: GlassPalette
+) : LinearLayout(context) {
 
-    private val dotView = View(context)
+    private val iconView = VectorIconView(context, iconType, pal.textMuted, 13f * context.resources.displayMetrics.density)
     private val label = TextView(context)
     private val pillBg = GradientDrawable()
 
@@ -1252,20 +1267,20 @@ class StatusCheckView(context: Context, title: String, private val pal: GlassPal
         val d = resources.displayMetrics.density
         setPadding((10 * d).toInt(), (8 * d).toInt(), (10 * d).toInt(), (8 * d).toInt())
 
-        pillBg.cornerRadius = 20 * d
+        pillBg.cornerRadius = 14 * d
         background = pillBg
 
-        val dotSize = (8 * d).toInt()
-        dotView.layoutParams = LayoutParams(dotSize, dotSize).apply {
-            setMargins(0, 0, (7 * d).toInt(), 0)
+        val lp = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
+            setMargins(0, 0, (6 * d).toInt(), 0)
         }
+        iconView.layoutParams = lp
 
         label.text = title
         label.textSize = 11f
         label.maxLines = 1
         label.ellipsize = TextUtils.TruncateAt.END
 
-        addView(dotView)
+        addView(iconView)
         addView(label)
 
         setChecked(false)
@@ -1273,12 +1288,9 @@ class StatusCheckView(context: Context, title: String, private val pal: GlassPal
 
     fun setChecked(ok: Boolean) {
         val d = resources.displayMetrics.density
-        dotView.background = GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
-            setColor(if (ok) pal.ok else withAlpha(pal.text, 90))
-        }
-        pillBg.setColor(if (ok) withAlpha(pal.ok, 45) else withAlpha(pal.text, 22))
-        pillBg.setStroke((1 * d).toInt(), if (ok) withAlpha(pal.ok, 110) else pal.cardStroke)
+        iconView.iconColor = if (ok) pal.ok else pal.textMuted
+        pillBg.setColor(if (ok) withAlpha(pal.ok, 34) else withAlpha(pal.text, 18))
+        pillBg.setStroke((1 * d).toInt(), if (ok) withAlpha(pal.ok, 75) else Color.TRANSPARENT)
         label.setTextColor(if (ok) pal.text else pal.textMuted)
     }
 }
