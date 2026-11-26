@@ -58,9 +58,9 @@ class MainActivity : AppCompatActivity() {
     )
 
     private lateinit var prefs: SharedPreferences
-    private var themeMode = "dark"      // "dark", "light" o "wallpaper"
-    private var blurPct = 50            // 0..100
-    private var opacityPct = 45         // 15..70
+    private var themeMode = "dark"
+    private var blurPct = 50
+    private var opacityPct = 45
     private lateinit var pal: GlassPalette
     private var settingsDialog: Dialog? = null
 
@@ -114,6 +114,14 @@ class MainActivity : AppCompatActivity() {
         refreshStatus()
     }
 
+    private val shizukuBinderReceivedListener = Shizuku.OnBinderReceivedListener {
+        runOnUiThread { refreshStatus() }
+    }
+
+    private val shizukuBinderDeadListener = Shizuku.OnBinderDeadListener {
+        runOnUiThread { refreshStatus() }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -126,6 +134,8 @@ class MainActivity : AppCompatActivity() {
 
         try {
             Shizuku.addRequestPermissionResultListener(shizukuPermissionListener)
+            Shizuku.addBinderReceivedListener(shizukuBinderReceivedListener)
+            Shizuku.addBinderDeadListener(shizukuBinderDeadListener)
             VirtualHidController.statusListener = { runOnUiThread { refreshStatus() } }
         } catch (_: Throwable) {
         }
@@ -140,10 +150,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-
-    // ------------------------------------------------------------------
-    //  APARIENCIA: paleta, desenfoque de fondo y barras del sistema
-    // ------------------------------------------------------------------
 
     private fun saveAppearance() {
         prefs.edit()
@@ -323,10 +329,6 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    // ------------------------------------------------------------------
-    //  PANTALLA PRINCIPAL
-    // ------------------------------------------------------------------
-
     private fun buildUi() {
         uiReady = false
         breathingAnimator?.cancel()
@@ -347,7 +349,6 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(pal.scrim)
         }
 
-        // --- 1. CABECERA LIMPIA ---
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -402,7 +403,6 @@ class MainActivity : AppCompatActivity() {
         header.addView(btnSettings)
         rootLayout.addView(header)
 
-        // --- 2. TARJETA DE ESTADO ---
         heroCardBg = createEdgeShadedBg(22 * d, pal.cardFill, pal.cardStroke)
         heroCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -453,7 +453,6 @@ class MainActivity : AppCompatActivity() {
         )
         rootLayout.addView(heroCard)
 
-        // --- PÍLDORAS DE PRESETS Y TECLAS PERSONALIZADAS ---
         presetRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -467,7 +466,6 @@ class MainActivity : AppCompatActivity() {
 
         rootLayout.addView(space(16 * d))
 
-        // --- 3. PASOS NUMERADOS ---
         sectionLabel = TextView(this).apply {
             text = "CONFIGURACIÓN"
             textSize = 10.5f
@@ -497,7 +495,6 @@ class MainActivity : AppCompatActivity() {
 
         rootLayout.addView(space(16 * d))
 
-        // --- 4. BOTÓN GRANDE JUGAR ---
         playReadyBg = GradientDrawable(
             GradientDrawable.Orientation.TL_BR,
             intArrayOf(
@@ -553,7 +550,6 @@ class MainActivity : AppCompatActivity() {
         }
         rootLayout.addView(playCard)
 
-        // --- 5. ESPACIADOR FLEXIBLE + PIE DE PÁGINA ARRIBA DE LA BARRA ---
         val bottomSpacer = View(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -892,10 +888,6 @@ class MainActivity : AppCompatActivity() {
         s.title.setTextColor(if (done) pal.textSub else pal.text)
     }
 
-    // ------------------------------------------------------------------
-    //  AJUSTES (engranaje)
-    // ------------------------------------------------------------------
-
     private fun showSettingsDialog() {
         val config = ControlConfig(this)
         val d = resources.displayMetrics.density
@@ -1132,10 +1124,6 @@ class MainActivity : AppCompatActivity() {
         parent.addView(sb)
     }
 
-    // ------------------------------------------------------------------
-    //  UTILIDADES VISUALES
-    // ------------------------------------------------------------------
-
     private fun createEdgeShadedBg(
         radius: Float,
         fillColor: Int,
@@ -1278,16 +1266,14 @@ class MainActivity : AppCompatActivity() {
         settingsDialog?.dismiss()
         try {
             Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener)
+            Shizuku.removeBinderReceivedListener(shizukuBinderReceivedListener)
+            Shizuku.removeBinderDeadListener(shizukuBinderDeadListener)
         } catch (_: Throwable) {
         }
         VirtualHidController.statusListener = null
         super.onDestroy()
     }
 }
-
-// ----------------------------------------------------------------------
-//  PALETA DE COLORES DEL TEMA
-// ----------------------------------------------------------------------
 
 private fun withAlpha(c: Int, a: Int): Int =
     Color.argb(a.coerceIn(0, 255), Color.red(c), Color.green(c), Color.blue(c))
@@ -1306,8 +1292,6 @@ class GlassPalette(
     val scrim: Int,
     val ok: Int
 )
-
-// --- ICONOS VECTORIALES CLEAN ---
 
 enum class VectorType {
     GAMEPAD,
