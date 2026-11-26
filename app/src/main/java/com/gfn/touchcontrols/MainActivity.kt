@@ -99,7 +99,6 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var footerFrame: TextView
     private lateinit var footerFrameBg: GradientDrawable
-    private lateinit var footerSub: TextView
 
     private var topInsetPx = 0
     private var bottomInsetPx = 0
@@ -295,7 +294,6 @@ class MainActivity : AppCompatActivity() {
 
         footerFrame.setTextColor(pal.textSub)
         footerFrameBg.setColor(withAlpha(pal.cardFill, 140))
-        footerSub.setTextColor(pal.textMuted)
 
         applyInsetsPadding()
         applySystemBars()
@@ -317,7 +315,7 @@ class MainActivity : AppCompatActivity() {
             padH,
             safeTop + (12 * d).toInt(),
             padH,
-            safeBottom + (12 * d).toInt()
+            safeBottom + (8 * d).toInt()
         )
     }
 
@@ -341,7 +339,7 @@ class MainActivity : AppCompatActivity() {
         rootLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(padH, (14 * d).toInt(), padH, (16 * d).toInt())
+            setPadding(padH, (14 * d).toInt(), padH, (12 * d).toInt())
             setBackgroundColor(pal.scrim)
         }
 
@@ -543,12 +541,15 @@ class MainActivity : AppCompatActivity() {
         }
         rootLayout.addView(playCard)
 
-        // --- 5. PIE DE PÁGINA CLEAN ---
-        val footer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(0, (18 * d).toInt(), 0, (6 * d).toInt())
+        // --- 5. ESPACIADOR FLEXIBLE + PIE DE PÁGINA ARRIBA DE LA BARRA ---
+        val bottomSpacer = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                (20 * d).toInt(),
+                1f
+            )
         }
+        rootLayout.addView(bottomSpacer)
 
         footerFrameBg = createEdgeShadedBg(12 * d, withAlpha(pal.cardFill, 140), Color.TRANSPARENT)
         footerFrame = TextView(this).apply {
@@ -558,22 +559,17 @@ class MainActivity : AppCompatActivity() {
             setTypeface(null, Typeface.BOLD)
             letterSpacing = 0.20f
             gravity = Gravity.CENTER
-            setPadding((16 * d).toInt(), (6 * d).toInt(), (16 * d).toInt(), (6 * d).toInt())
+            setPadding((16 * d).toInt(), (7 * d).toInt(), (16 * d).toInt(), (7 * d).toInt())
             background = footerFrameBg
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = (8 * d).toInt()
+                bottomMargin = (4 * d).toInt()
+            }
         }
-
-        footerSub = TextView(this).apply {
-            text = "CONTROL TOTAL EN TUS MANOS"
-            textSize = 9f
-            setTextColor(pal.textMuted)
-            letterSpacing = 0.14f
-            gravity = Gravity.CENTER
-            setPadding(0, (6 * d).toInt(), 0, 0)
-        }
-
-        footer.addView(footerFrame)
-        footer.addView(footerSub)
-        rootLayout.addView(footer)
+        rootLayout.addView(footerFrame)
 
         val scroll = ScrollView(this).apply {
             isFillViewport = true
@@ -749,12 +745,8 @@ class MainActivity : AppCompatActivity() {
             setTypeface(null, Typeface.BOLD)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
-        val btnClose = Button(this).apply {
-            text = "Cerrar"
-            textSize = 12f
-            backgroundTintList = ColorStateList.valueOf(pal.accentDark)
-            setTextColor(Color.WHITE)
-            setOnClickListener { dialog.dismiss() }
+        val btnClose = createStyledActionChip("Cerrar", pal.accentDark, Color.WHITE, d) {
+            dialog.dismiss()
         }
         header.addView(title)
         header.addView(btnClose)
@@ -839,6 +831,29 @@ class MainActivity : AppCompatActivity() {
         root.addView(scroll)
         dialog.setContentView(root)
         dialog.show()
+    }
+
+    // Helper para unificar botones/chips en diálogos y Centro de Control
+    private fun createStyledActionChip(
+        text: String,
+        bgColor: Int,
+        textColor: Int,
+        d: Float,
+        onClick: () -> Unit
+    ): TextView {
+        return TextView(this).apply {
+            this.text = text
+            textSize = 12.5f
+            gravity = Gravity.CENTER
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(textColor)
+            setPadding((14 * d).toInt(), (10 * d).toInt(), (14 * d).toInt(), (10 * d).toInt())
+            background = GradientDrawable().apply {
+                cornerRadius = 12 * d
+                setColor(bgColor)
+            }
+            makeClickable(this, onClick)
+        }
     }
 
     private fun addDialogTitle(parent: LinearLayout, title: String) {
