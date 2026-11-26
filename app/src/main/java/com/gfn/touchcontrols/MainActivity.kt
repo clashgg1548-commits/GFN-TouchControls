@@ -83,6 +83,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var checkMouse: StatusCheckView
     private lateinit var tvGfnSub: TextView
 
+    private lateinit var presetRow: LinearLayout
+
     private lateinit var sectionLabel: TextView
     private lateinit var stepOverlay: StepRefs
     private lateinit var stepShizuku: StepRefs
@@ -283,6 +285,8 @@ class MainActivity : AppCompatActivity() {
         checkShizukuPerm.applyPalette(pal)
         checkMouse.applyPalette(pal)
 
+        rebuildPresetRow(d)
+
         sectionLabel.setTextColor(pal.textMuted)
 
         playReadyBg.colors = intArrayOf(
@@ -449,7 +453,19 @@ class MainActivity : AppCompatActivity() {
         )
         rootLayout.addView(heroCard)
 
-        rootLayout.addView(space(20 * d))
+        // --- PÍLDORAS DE PRESETS Y TECLAS PERSONALIZADAS ---
+        presetRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = (10 * d).toInt() }
+        }
+        rebuildPresetRow(d)
+        rootLayout.addView(presetRow)
+
+        rootLayout.addView(space(16 * d))
 
         // --- 3. PASOS NUMERADOS ---
         sectionLabel = TextView(this).apply {
@@ -479,7 +495,7 @@ class MainActivity : AppCompatActivity() {
         rootLayout.addView(stepShizuku.root)
         rootLayout.addView(stepHud.root)
 
-        rootLayout.addView(space(18 * d))
+        rootLayout.addView(space(16 * d))
 
         // --- 4. BOTÓN GRANDE JUGAR ---
         playReadyBg = GradientDrawable(
@@ -527,17 +543,13 @@ class MainActivity : AppCompatActivity() {
         playCard.addView(playIcon)
         playCard.addView(playTextCol)
         playCard.addView(playArrow)
+
         makeClickable(playCard) {
-            if (allReady) {
-                val launch = packageManager.getLaunchIntentForPackage("com.nvidia.geforcenow")
-                if (launch != null) {
-                    startActivity(launch)
-                } else {
-                    playSub.text = "GFN no instalado"
-                }
-            } else {
+            if (!allReady) {
                 playSub.text = "Primero completa los pasos de arriba"
+                return@makeClickable
             }
+            launchGeForceNow()
         }
         rootLayout.addView(playCard)
 
@@ -599,6 +611,131 @@ class MainActivity : AppCompatActivity() {
 
         uiReady = true
         refreshStatus()
+    }
+
+    private fun launchGeForceNow() {
+        val targetPkg = "com.nvidia.geforcenow"
+        val launchIntent = packageManager.getLaunchIntentForPackage(targetPkg)?.apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        } ?: Intent(Intent.ACTION_MAIN).apply {
+            setPackage(targetPkg)
+            addCategory(Intent.CATEGORY_LAUNCHER)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+
+        try {
+            startActivity(launchIntent)
+        } catch (_: Throwable) {
+            playSub.text = "GFN no instalado"
+        }
+    }
+
+    private fun rebuildPresetRow(d: Float) {
+        if (!::presetRow.isInitialized) return
+        presetRow.removeAllViews()
+        val config = ControlConfig(this)
+        val active = HudPresetManager.getActivePreset(this)
+        val customCount = HudPresetManager.getCustomKeys(this).size
+
+        fun makePill(label: String, selected: Boolean, onTap: () -> Unit): TextView {
+            return TextView(this).apply {
+                text = label
+                textSize = 11.5f
+                gravity = Gravity.CENTER
+                setTypeface(null, Typeface.BOLD)
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+                setTextColor(if (selected) Color.WHITE else pal.textSub)
+                setPadding((10 * d).toInt(), (8 * d).toInt(), (10 * d).toInt(), (8 * d).toInt())
+                background = GradientDrawable().apply {
+                    cornerRadius = 14 * d
+                    setColor(if (selected) pal.accent else withAlpha(pal.text, 18))
+                    setStroke((1 * d).toInt(), if (selected) pal.accent else pal.cardStroke)
+                }
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                    .apply { setMargins((3 * d).toInt(), 0, (3 * d).toInt(), 0) }
+                makeClickable(this, onTap)
+            }
+        }
+
+        val pillShooter = makePill("Shooter", active == "shooter") {
+            HudPresetManager.applyPreset(this, "shooter", config)
+            applyAppearanceLive()
+        }
+        val pillAdventure = makePill("Aventura", active == "adventure") {
+            HudPresetManager.applyPreset(this, "adventure", config)
+            applyAppearanceLive()
+        }
+        val keyText = if (customCount > 0) "+ Tecla ($customCount)" else "+ Tecla"
+        val pillAddKey = makePill(keyText, false) {
+            showAddKeyDialog(d)
+        }
+
+        presetRow.addView(pillShooter)
+        presetRow.addView(pillAdventure)
+        presetRow.addView(pillAddKey)
+    }
+
+    private fun showAddKeyDialog(d: Float) {
+        val dialog = Dialog(this)
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        dialog.window?.setDimAmount(0.55f)
+
+        val pad = (16 * d).toInt()
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad, pad, pad)
+            background = GradientDrawable().apply {
+                setColor(pal.panelFill)
+                cornerRadius = 22 * d
+                setStroke((1 * d).toInt(), pal.cardStroke)
+            }
+        }
+
+        val title = TextView(this).apply {
+            text = "Agregar tecla al HUD"
+            textSize = 16f
+            setTextColor(pal.text)
+            setTypeface(null, Typeface.BOLD)
+            setPadding(0, 0, 0, (10 * d).toInt())
+        }
+        container.addView(title)
+
+        val scroll = ScrollView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                (resources.displayMetrics.widthPixels * 0.82f).toInt(),
+                (resources.displayMetrics.heightPixels * 0.50f).toInt()
+            )
+        }
+        val listBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+
+        for (keyName in HudPresetManager.availableExtraKeys) {
+            val item = TextView(this).apply {
+                text = keyName
+                textSize = 13f
+                setTextColor(pal.text)
+                setPadding((12 * d).toInt(), (11 * d).toInt(), (12 * d).toInt(), (11 * d).toInt())
+                background = GradientDrawable().apply {
+                    cornerRadius = 12 * d
+                    setColor(withAlpha(pal.text, 16))
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = (6 * d).toInt() }
+                makeClickable(this) {
+                    HudPresetManager.addCustomKey(this@MainActivity, keyName)
+                    dialog.dismiss()
+                    applyAppearanceLive()
+                }
+            }
+            listBox.addView(item)
+        }
+
+        scroll.addView(listBox)
+        container.addView(scroll)
+        dialog.setContentView(container)
+        dialog.show()
     }
 
     private fun dp(v: Float) = v * resources.displayMetrics.density
@@ -833,7 +970,6 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    // Helper para unificar botones/chips en diálogos y Centro de Control
     private fun createStyledActionChip(
         text: String,
         bgColor: Int,
