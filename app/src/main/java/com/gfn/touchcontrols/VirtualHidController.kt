@@ -33,7 +33,6 @@ object VirtualHidController {
         private set
 
     var statusListener: ((String) -> Unit)? = null
-    var onStateChanged: (() -> Unit)? = null
     var lastStatus: String = "Sin conectar"
         private set
 
@@ -64,20 +63,18 @@ object VirtualHidController {
         }
         uinputWriter = null
         uinputProcess = null
-        isConnected = false
-        updateStatus("Desconectado")
     }
 
     fun connect(context: Context): Boolean {
         try {
             if (!Shizuku.pingBinder()) {
-                isConnected = false
                 updateStatus("Shizuku no está activo (abrí Shizuku)")
+                isConnected = false
                 return false
             }
             if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
-                isConnected = false
                 updateStatus("Falta autorizar Shizuku")
+                isConnected = false
                 return false
             }
 
@@ -94,16 +91,16 @@ object VirtualHidController {
                 }
             }
 
-            // 2. Ratón físico real a nivel de kernel mediante /system/bin/uinput
+            // 2. Ratón FÍSICO real a nivel de kernel mediante /system/bin/uinput
             initHardwareMouse()
 
             isConnected = true
-            updateStatus("CONECTADO (Hardware Mouse)")
+            updateStatus("CONECTADO (Hardware Mouse) ✅")
             return true
         } catch (e: Throwable) {
             Log.e(TAG, "Error connect", e)
-            isConnected = false
             updateStatus("Error: ${e.message}")
+            isConnected = false
             return false
         }
     }
@@ -112,6 +109,7 @@ object VirtualHidController {
         try {
             uinputProcess?.destroy()
 
+            // Llamada segura a newProcess de Shizuku por reflexión
             val clazz = Class.forName("rikka.shizuku.Shizuku")
             val method = clazz.getDeclaredMethod(
                 "newProcess",
@@ -129,6 +127,7 @@ object VirtualHidController {
 
             val writer = BufferedWriter(OutputStreamWriter(proc.outputStream))
 
+            // Registra un ratón USB real con clics (izquierdo, derecho) y movimiento relativo X/Y
             val regJson = "{\"id\":1,\"command\":\"register\",\"name\":\"GFN Hardware Mouse\",\"vid\":6225,\"pid\":20209,\"bus\":\"usb\",\"configuration\":[{\"type\":\"UI_SET_EVBIT\",\"data\":[\"EV_KEY\",\"EV_REL\"]},{\"type\":\"UI_SET_KEYBIT\",\"data\":[272,273,274]},{\"type\":\"UI_SET_RELBIT\",\"data\":[0,1,8]}]}"
             writer.write(regJson)
             writer.newLine()
@@ -258,31 +257,29 @@ object VirtualHidController {
 
         if ((lastModifiers and 0x02) != (modifiers and 0x02)) {
             val action = if ((modifiers and 0x02) != 0) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP
-            injectKeyCode(now, action, KeyEvent.KEYCODE_SHIFT_LEFT)
+            injectKey(KeyEvent(now, now, action, KeyEvent.KEYCODE_SHIFT_LEFT, 0))
         }
         if ((lastModifiers and 0x01) != (modifiers and 0x01)) {
             val action = if ((modifiers and 0x01) != 0) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP
-            injectKeyCode(now, action, KeyEvent.KEYCODE_CTRL_LEFT)
+            injectKey(KeyEvent(now, now, action, KeyEvent.KEYCODE_CTRL_LEFT, 0))
         }
         for (hid in oldSet - newSet) {
             val kc = hidToAndroidKeyCode(hid)
             if (kc != KeyEvent.KEYCODE_UNKNOWN) {
-                injectKeyCode(now, KeyEvent.ACTION_UP, kc)
+                injectKey(KeyEvent(now, now, KeyEvent.ACTION_UP, kc, 0))
             }
         }
         for (hid in newSet - oldSet) {
             val kc = hidToAndroidKeyCode(hid)
             if (kc != KeyEvent.KEYCODE_UNKNOWN) {
-                injectKeyCode(now, KeyEvent.ACTION_DOWN, kc)
+                injectKey(KeyEvent(now, now, KeyEvent.ACTION_DOWN, kc, 0))
             }
         }
         lastModifiers = modifiers
         lastKeys = keys.copyOf(6)
     }
 
-    private fun injectKeyCode(now: Long, action: Int, keyCode: Int) {
-        val flags = if (keyCode == KeyEvent.KEYCODE_ESCAPE) KeyEvent.FLAG_FROM_SYSTEM else 0
-        val ke = KeyEvent(now, now, action, keyCode, 0, 0, 0, 0, flags)
+    private fun injectKey(ke: KeyEvent) {
         try {
             ke.source = InputDevice.SOURCE_KEYBOARD
         } catch (_: Throwable) {
@@ -300,10 +297,12 @@ object VirtualHidController {
         val changed = buttons xor lastMouseButtons
         try {
             if (changed != 0) {
+                // Click izquierdo (LMB = 0x01 -> BTN_LEFT 272)
                 if ((changed and 0x01) != 0) {
                     val v = if ((buttons and 0x01) != 0) 1 else 0
                     writer.write("{\"id\":1,\"command\":\"inject\",\"events\":[1,272,$v,0,0,0]}\n")
                 }
+                // Click derecho / apuntar (RMB = 0x02 -> BTN_RIGHT 273)
                 if ((changed and 0x02) != 0) {
                     val v = if ((buttons and 0x02) != 0) 1 else 0
                     writer.write("{\"id\":1,\"command\":\"inject\",\"events\":[1,273,$v,0,0,0]}\n")
@@ -311,6 +310,7 @@ object VirtualHidController {
                 lastMouseButtons = buttons
             }
 
+            // Movimiento relativo de ratón al kernel: EV_REL (2), REL_X (0), REL_Y (1), EV_SYN (0)
             if (dx != 0 || dy != 0) {
                 writer.write("{\"id\":1,\"command\":\"inject\",\"events\":[2,0,$dx,2,1,$dy,0,0,0]}\n")
             }
@@ -323,44 +323,22 @@ object VirtualHidController {
 
     private fun hidToAndroidKeyCode(hid: Int): Int = when (hid) {
         0x04 -> KeyEvent.KEYCODE_A
-        0x05 -> KeyEvent.KEYCODE_B
         0x06 -> KeyEvent.KEYCODE_C
         0x07 -> KeyEvent.KEYCODE_D
         0x08 -> KeyEvent.KEYCODE_E
         0x09 -> KeyEvent.KEYCODE_F
         0x0A -> KeyEvent.KEYCODE_G
-        0x0B -> KeyEvent.KEYCODE_H
-        0x0C -> KeyEvent.KEYCODE_I
-        0x0D -> KeyEvent.KEYCODE_J
-        0x0E -> KeyEvent.KEYCODE_K
-        0x0F -> KeyEvent.KEYCODE_L
         0x10 -> KeyEvent.KEYCODE_M
-        0x11 -> KeyEvent.KEYCODE_N
-        0x12 -> KeyEvent.KEYCODE_O
-        0x13 -> KeyEvent.KEYCODE_P
         0x14 -> KeyEvent.KEYCODE_Q
         0x15 -> KeyEvent.KEYCODE_R
         0x16 -> KeyEvent.KEYCODE_S
-        0x17 -> KeyEvent.KEYCODE_T
-        0x18 -> KeyEvent.KEYCODE_U
-        0x19 -> KeyEvent.KEYCODE_V
         0x1A -> KeyEvent.KEYCODE_W
-        0x1B -> KeyEvent.KEYCODE_X
-        0x1C -> KeyEvent.KEYCODE_Y
         0x1D -> KeyEvent.KEYCODE_Z
         0x1E -> KeyEvent.KEYCODE_1
         0x1F -> KeyEvent.KEYCODE_2
         0x20 -> KeyEvent.KEYCODE_3
         0x21 -> KeyEvent.KEYCODE_4
-        0x22 -> KeyEvent.KEYCODE_5
-        0x23 -> KeyEvent.KEYCODE_6
-        0x24 -> KeyEvent.KEYCODE_7
-        0x25 -> KeyEvent.KEYCODE_8
-        0x26 -> KeyEvent.KEYCODE_9
-        0x27 -> KeyEvent.KEYCODE_0
-        0x28 -> KeyEvent.KEYCODE_ENTER
         0x29 -> KeyEvent.KEYCODE_ESCAPE
-        0x2A -> KeyEvent.KEYCODE_DEL
         0x2B -> KeyEvent.KEYCODE_TAB
         0x2C -> KeyEvent.KEYCODE_SPACE
         else -> KeyEvent.KEYCODE_UNKNOWN
@@ -369,6 +347,5 @@ object VirtualHidController {
     private fun updateStatus(msg: String) {
         lastStatus = msg
         statusListener?.invoke(msg)
-        onStateChanged?.invoke()
     }
 }
