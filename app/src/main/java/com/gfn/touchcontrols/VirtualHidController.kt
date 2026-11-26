@@ -33,6 +33,7 @@ object VirtualHidController {
         private set
 
     var statusListener: ((String) -> Unit)? = null
+    var onStateChanged: (() -> Unit)? = null
     var lastStatus: String = "Sin conectar"
         private set
 
@@ -63,22 +64,24 @@ object VirtualHidController {
         }
         uinputWriter = null
         uinputProcess = null
+        isConnected = false
+        updateStatus("Desconectado")
     }
 
     fun connect(context: Context): Boolean {
         try {
             if (!Shizuku.pingBinder()) {
-                updateStatus("Shizuku no está activo (abrí Shizuku)")
                 isConnected = false
+                updateStatus("Shizuku no está activo (abrí Shizuku)")
                 return false
             }
             if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
-                updateStatus("Falta autorizar Shizuku")
                 isConnected = false
+                updateStatus("Falta autorizar Shizuku")
                 return false
             }
 
-            // 1. Teclado vía Shizuku Binder (ya comprobado que funciona 100%)
+            // 1. Teclado vía Shizuku Binder
             val rawBinder = SystemServiceHelper.getSystemService("input")
             if (rawBinder != null) {
                 val wrapper = ShizukuBinderWrapper(rawBinder)
@@ -91,16 +94,16 @@ object VirtualHidController {
                 }
             }
 
-            // 2. Ratón FÍSICO real a nivel de kernel mediante /system/bin/uinput
+            // 2. Ratón físico real a nivel de kernel mediante /system/bin/uinput
             initHardwareMouse()
 
             isConnected = true
-            updateStatus("CONECTADO (Hardware Mouse) ✅")
+            updateStatus("CONECTADO (Hardware Mouse)")
             return true
         } catch (e: Throwable) {
             Log.e(TAG, "Error connect", e)
-            updateStatus("Error: ${e.message}")
             isConnected = false
+            updateStatus("Error: ${e.message}")
             return false
         }
     }
@@ -109,7 +112,6 @@ object VirtualHidController {
         try {
             uinputProcess?.destroy()
 
-            // Llamada segura a newProcess de Shizuku por reflexión
             val clazz = Class.forName("rikka.shizuku.Shizuku")
             val method = clazz.getDeclaredMethod(
                 "newProcess",
@@ -127,7 +129,6 @@ object VirtualHidController {
 
             val writer = BufferedWriter(OutputStreamWriter(proc.outputStream))
 
-            // Registra un ratón USB real con clics (izquierdo, derecho, medio) y movimiento relativo X/Y
             val regJson = "{\"id\":1,\"command\":\"register\",\"name\":\"GFN Hardware Mouse\",\"vid\":6225,\"pid\":20209,\"bus\":\"usb\",\"configuration\":[{\"type\":\"UI_SET_EVBIT\",\"data\":[\"EV_KEY\",\"EV_REL\"]},{\"type\":\"UI_SET_KEYBIT\",\"data\":[272,273,274]},{\"type\":\"UI_SET_RELBIT\",\"data\":[0,1,8]}]}"
             writer.write(regJson)
             writer.newLine()
@@ -297,12 +298,10 @@ object VirtualHidController {
         val changed = buttons xor lastMouseButtons
         try {
             if (changed != 0) {
-                // Click izquierdo (LMB = 0x01 -> BTN_LEFT 272)
                 if ((changed and 0x01) != 0) {
                     val v = if ((buttons and 0x01) != 0) 1 else 0
                     writer.write("{\"id\":1,\"command\":\"inject\",\"events\":[1,272,$v,0,0,0]}\n")
                 }
-                // Click derecho / apuntar (RMB = 0x02 -> BTN_RIGHT 273)
                 if ((changed and 0x02) != 0) {
                     val v = if ((buttons and 0x02) != 0) 1 else 0
                     writer.write("{\"id\":1,\"command\":\"inject\",\"events\":[1,273,$v,0,0,0]}\n")
@@ -310,7 +309,6 @@ object VirtualHidController {
                 lastMouseButtons = buttons
             }
 
-            // Movimiento relativo de ratón al kernel: EV_REL (2), REL_X (0), REL_Y (1), EV_SYN (0)
             if (dx != 0 || dy != 0) {
                 writer.write("{\"id\":1,\"command\":\"inject\",\"events\":[2,0,$dx,2,1,$dy,0,0,0]}\n")
             }
@@ -347,5 +345,6 @@ object VirtualHidController {
     private fun updateStatus(msg: String) {
         lastStatus = msg
         statusListener?.invoke(msg)
+        onStateChanged?.invoke()
     }
 }
