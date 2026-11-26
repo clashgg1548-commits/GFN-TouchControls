@@ -43,7 +43,6 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import rikka.shizuku.Shizuku
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -58,9 +57,9 @@ class MainActivity : AppCompatActivity() {
     )
 
     private lateinit var prefs: SharedPreferences
-    private var themeMode = "dark"
-    private var blurPct = 50
-    private var opacityPct = 45
+    private var themeMode = "dark"      // "dark", "light" o "wallpaper"
+    private var blurPct = 50            // 0..100
+    private var opacityPct = 45         // 15..70
     private lateinit var pal: GlassPalette
     private var settingsDialog: Dialog? = null
 
@@ -107,21 +106,6 @@ class MainActivity : AppCompatActivity() {
     private var uiReady = false
     private var breathingAnimator: ValueAnimator? = null
 
-    private val shizukuPermissionListener = Shizuku.OnRequestPermissionResultListener { _, grantResult ->
-        if (grantResult == PackageManager.PERMISSION_GRANTED) {
-            safeConnect()
-        }
-        refreshStatus()
-    }
-
-    private val shizukuBinderReceivedListener = Shizuku.OnBinderReceivedListener {
-        runOnUiThread { refreshStatus() }
-    }
-
-    private val shizukuBinderDeadListener = Shizuku.OnBinderDeadListener {
-        runOnUiThread { refreshStatus() }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -131,14 +115,7 @@ class MainActivity : AppCompatActivity() {
         opacityPct = prefs.getInt("opacity", 45).coerceIn(15, 70)
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
-
-        try {
-            Shizuku.addRequestPermissionResultListener(shizukuPermissionListener)
-            Shizuku.addBinderReceivedListener(shizukuBinderReceivedListener)
-            Shizuku.addBinderDeadListener(shizukuBinderDeadListener)
-            VirtualHidController.statusListener = { runOnUiThread { refreshStatus() } }
-        } catch (_: Throwable) {
-        }
+        window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
 
         buildUi()
 
@@ -150,6 +127,10 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
+    // ------------------------------------------------------------------
+    //  APARIENCIA: paleta, desenfoque de fondo y barras del sistema
+    // ------------------------------------------------------------------
 
     private fun saveAppearance() {
         prefs.edit()
@@ -209,9 +190,9 @@ class MainActivity : AppCompatActivity() {
         val panelTone = if (light) Color.rgb(250, 251, 253) else Color.rgb(22, 25, 33)
         val fillAlpha = (opacityPct / 100f * 255f).toInt()
         val scrimAlpha = if (themeMode == "wallpaper") {
-            if (light) 115 else 75
+            if (light) 70 else 45
         } else {
-            if (light) 165 else 95
+            if (light) 125 else 55
         }
 
         return GlassPalette(
@@ -245,14 +226,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun applyWindowBlur() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val radius = if (crossWindowBlurEnabled()) {
-                (blurPct / 100f * 45f * resources.displayMetrics.density).toInt()
+            val radius = if (crossWindowBlurEnabled() && blurPct > 0) {
+                (blurPct / 100f * 50f * resources.displayMetrics.density).toInt()
             } else {
                 0
             }
             try {
+                window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
                 window.setBackgroundBlurRadius(radius)
-                window.setDimAmount(if (radius > 0) 0.14f else 0.0f)
+                window.setDimAmount(if (radius > 0) 0.08f else 0.0f)
             } catch (_: Throwable) {
             }
         }
@@ -329,6 +311,10 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    // ------------------------------------------------------------------
+    //  PANTALLA PRINCIPAL
+    // ------------------------------------------------------------------
+
     private fun buildUi() {
         uiReady = false
         breathingAnimator?.cancel()
@@ -349,6 +335,7 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(pal.scrim)
         }
 
+        // --- 1. CABECERA LIMPIA ---
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -403,6 +390,7 @@ class MainActivity : AppCompatActivity() {
         header.addView(btnSettings)
         rootLayout.addView(header)
 
+        // --- 2. TARJETA DE ESTADO ---
         heroCardBg = createEdgeShadedBg(22 * d, pal.cardFill, pal.cardStroke)
         heroCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -453,6 +441,7 @@ class MainActivity : AppCompatActivity() {
         )
         rootLayout.addView(heroCard)
 
+        // --- PÍLDORAS DE PRESETS Y TECLAS PERSONALIZADAS ---
         presetRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -466,6 +455,7 @@ class MainActivity : AppCompatActivity() {
 
         rootLayout.addView(space(16 * d))
 
+        // --- 3. PASOS NUMERADOS ---
         sectionLabel = TextView(this).apply {
             text = "CONFIGURACIÓN"
             textSize = 10.5f
@@ -483,8 +473,8 @@ class MainActivity : AppCompatActivity() {
             } catch (_: Throwable) {
             }
         }
-        stepShizuku = createStepCard(d, 2, "Conectar Shizuku", "Ratón virtual (uinput)") {
-            connectShizuku()
+        stepShizuku = createStepCard(d, 2, "Conectar Shizuku", "Módulo separado (ShizukuBridge)") {
+            refreshStatus()
         }
         stepHud = createStepCard(d, 3, "Iniciar HUD", "Activar controles") {
             toggleOverlay()
@@ -495,6 +485,7 @@ class MainActivity : AppCompatActivity() {
 
         rootLayout.addView(space(16 * d))
 
+        // --- 4. BOTÓN GRANDE JUGAR ---
         playReadyBg = GradientDrawable(
             GradientDrawable.Orientation.TL_BR,
             intArrayOf(
@@ -550,6 +541,7 @@ class MainActivity : AppCompatActivity() {
         }
         rootLayout.addView(playCard)
 
+        // --- 5. ESPACIADOR FLEXIBLE + PIE DE PÁGINA ARRIBA DE LA BARRA ---
         val bottomSpacer = View(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -888,6 +880,10 @@ class MainActivity : AppCompatActivity() {
         s.title.setTextColor(if (done) pal.textSub else pal.text)
     }
 
+    // ------------------------------------------------------------------
+    //  AJUSTES (engranaje)
+    // ------------------------------------------------------------------
+
     private fun showSettingsDialog() {
         val config = ControlConfig(this)
         val d = resources.displayMetrics.density
@@ -1124,6 +1120,10 @@ class MainActivity : AppCompatActivity() {
         parent.addView(sb)
     }
 
+    // ------------------------------------------------------------------
+    //  UTILIDADES VISUALES Y ESTADO
+    // ------------------------------------------------------------------
+
     private fun createEdgeShadedBg(
         radius: Float,
         fillColor: Int,
@@ -1154,32 +1154,6 @@ class MainActivity : AppCompatActivity() {
         refreshStatus()
     }
 
-    private fun safeConnect() {
-        Thread {
-            try {
-                VirtualHidController.connect(this)
-            } catch (_: Throwable) {
-            }
-            runOnUiThread { refreshStatus() }
-        }.start()
-    }
-
-    private fun connectShizuku() {
-        try {
-            if (!Shizuku.pingBinder()) {
-                refreshStatus()
-                return
-            }
-            if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
-                safeConnect()
-            } else {
-                Shizuku.requestPermission(1001)
-            }
-        } catch (_: Throwable) {
-        }
-        refreshStatus()
-    }
-
     private fun toggleOverlay() {
         if (!Settings.canDrawOverlays(this)) {
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
@@ -1203,14 +1177,10 @@ class MainActivity : AppCompatActivity() {
         if (!uiReady) return
 
         val overlayOk = Settings.canDrawOverlays(this)
-        val shizukuAlive = try { Shizuku.pingBinder() } catch (_: Throwable) { false }
-        val shizukuPerm = shizukuAlive && try {
-            Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
-        } catch (_: Throwable) {
-            false
-        }
-        val mouseOk = VirtualHidController.isConnected
-        val connected = shizukuPerm && mouseOk
+        val shizukuAlive = false
+        val shizukuPerm = false
+        val mouseOk = false
+        val connected = false
         val hudRunning = OverlayService.isRunning
 
         checkOverlay.setChecked(overlayOk)
@@ -1218,12 +1188,11 @@ class MainActivity : AppCompatActivity() {
         checkShizukuPerm.setChecked(shizukuPerm)
         checkMouse.setChecked(mouseOk)
 
-        tvGfnSub.text = if (connected) "Conectado" else "Listo para iniciar"
-        tvGfnSub.setTextColor(if (connected) pal.ok else pal.textSub)
+        tvGfnSub.text = if (overlayOk) "Overlay listo" else "Esperando..."
+        tvGfnSub.setTextColor(if (overlayOk) pal.ok else pal.textSub)
 
         val current = when {
             !overlayOk -> 1
-            !connected -> 2
             !hudRunning -> 3
             else -> 0
         }
@@ -1231,19 +1200,14 @@ class MainActivity : AppCompatActivity() {
         applyStepStyle(stepOverlay, overlayOk, current == 1)
         stepOverlay.sub.text = if (overlayOk) "Permiso concedido" else "Mostrar sobre apps"
 
-        applyStepStyle(stepShizuku, connected, current == 2)
-        stepShizuku.sub.text = when {
-            connected -> "Ratón virtual conectado"
-            !shizukuAlive -> "Abre Shizuku y actívalo"
-            !shizukuPerm -> "Toca para dar permiso"
-            else -> "Toca para conectar el ratón"
-        }
+        applyStepStyle(stepShizuku, connected, false)
+        stepShizuku.sub.text = "Gestionado en ShizukuBridge"
 
         applyStepStyle(stepHud, hudRunning, current == 3)
         stepHud.title.text = if (hudRunning) "Detener HUD" else "Iniciar HUD"
         stepHud.sub.text = if (hudRunning) "Cerrar controles" else "Activar controles"
 
-        allReady = current == 0
+        allReady = overlayOk
         if (allReady) {
             playCard.background = playReadyBg
             playIcon.iconColor = Color.WHITE
@@ -1264,16 +1228,13 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         breathingAnimator?.cancel()
         settingsDialog?.dismiss()
-        try {
-            Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener)
-            Shizuku.removeBinderReceivedListener(shizukuBinderReceivedListener)
-            Shizuku.removeBinderDeadListener(shizukuBinderDeadListener)
-        } catch (_: Throwable) {
-        }
-        VirtualHidController.statusListener = null
         super.onDestroy()
     }
 }
+
+// ----------------------------------------------------------------------
+//  PALETA DE COLORES DEL TEMA
+// ----------------------------------------------------------------------
 
 private fun withAlpha(c: Int, a: Int): Int =
     Color.argb(a.coerceIn(0, 255), Color.red(c), Color.green(c), Color.blue(c))
@@ -1292,6 +1253,8 @@ class GlassPalette(
     val scrim: Int,
     val ok: Int
 )
+
+// --- ICONOS VECTORIALES CLEAN ---
 
 enum class VectorType {
     GAMEPAD,
