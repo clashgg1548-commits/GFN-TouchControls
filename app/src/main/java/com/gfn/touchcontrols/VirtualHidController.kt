@@ -216,22 +216,20 @@ object VirtualHidController {
     }
 
     fun addMouseDelta(dxFloat: Float, dyFloat: Float) {
+        val sendX: Int
+        val sendY: Int
+        val btnState: Int
         synchronized(lock) {
             accDx += dxFloat
             accDy += dyFloat
+            sendX = accDx.roundToInt()
+            sendY = accDy.roundToInt()
+            if (sendX == 0 && sendY == 0) return
+            accDx -= sendX
+            accDy -= sendY
+            btnState = currentMouseButtons
         }
         executor.execute {
-            val sendX: Int
-            val sendY: Int
-            val btnState: Int
-            synchronized(lock) {
-                sendX = accDx.roundToInt()
-                sendY = accDy.roundToInt()
-                if (sendX == 0 && sendY == 0) return@execute
-                accDx -= sendX
-                accDy -= sendY
-                btnState = currentMouseButtons
-            }
             injectHardwareMouse(btnState, sendX, sendY)
         }
     }
